@@ -1,4 +1,4 @@
-# Tie-Out
+# Lagos
 
 A Microsoft Word add-in for tying selections in a Word document to specific
 locations in PDF evidence. Built for SOX/audit workpaper review.
