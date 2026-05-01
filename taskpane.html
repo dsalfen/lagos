@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tie-Out</title>
+
+  <!-- Office.js — REQUIRED. Loads the Word/Excel/etc. JS bridge. -->
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+
+  <!-- PDF.js (legacy build = wider browser/webview support) from a CDN.
+       Pinned version so a future PDF.js change can't break the add-in. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs" type="module"></script>
+
+  <!-- Type a single distinctive font pair: IBM Plex Sans + Mono.
+       Inter is intentionally avoided per the design brief. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" />
+
+  <style>
+    /*
+      Tie-Out task pane styling.
+      Aesthetic: forensic / evidence-stamp.
+      Restrained ink-on-paper palette + oxblood accent.
+    */
+
+    :root {
+      --ink:        #0e1116;
+      --ink-soft:   #2b323b;
+      --paper:      #f7f5ef;
+      --paper-deep: #ebe7dd;
+      --rule:       #c9c3b6;
+      --rule-soft:  #ddd7c8;
+      --accent:     #7a1e1e;
+      --accent-ink: #501212;
+      --positive:   #2c5e3b;
+      --warn:       #9a6a1f;
+      --font-sans:  "IBM Plex Sans", system-ui, sans-serif;
+      --font-mono:  "IBM Plex Mono", ui-monospace, monospace;
+      --pad: 12px;
+      --radius: 2px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--ink);
+      background: var(--paper);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #app { display: flex; flex-direction: column; min-height: 100%; }
+
+    /* Masthead */
+    .masthead {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      padding: 14px var(--pad) 10px;
+      border-bottom: 1px solid var(--ink);
+      background: var(--paper-deep);
+    }
+    .brand { display: flex; align-items: baseline; gap: 8px; }
+    .brand-mark {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 18px;
+      color: var(--accent);
+      transform: translateY(2px);
+    }
+    .brand-name {
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-size: 14px;
+    }
+    .brand-meta {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--ink-soft);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    /* Section labels */
+    .section-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px var(--pad) 6px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+    }
+    .section-label-rule { flex: 1; height: 1px; background: var(--rule); }
+
+    /* PDF section */
+    .pdf-section { padding: 0 var(--pad) 10px; }
+    .pdf-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .file-button {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 10px;
+      border: 1px solid var(--ink);
+      background: var(--paper);
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border-radius: var(--radius);
+    }
+    .file-button:hover { background: var(--paper-deep); }
+
+    .page-nav {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: auto;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .page-nav button {
+      width: 22px;
+      height: 22px;
+      border: 1px solid var(--rule);
+      background: var(--paper);
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+      border-radius: var(--radius);
+    }
+    .page-nav button:hover:not(:disabled) { border-color: var(--ink); }
+    .page-nav button:disabled { opacity: 0.35; cursor: default; }
+    #page-input {
+      width: 36px;
+      border: 1px solid var(--rule);
+      padding: 2px 4px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      text-align: right;
+      border-radius: var(--radius);
+      background: var(--paper);
+    }
+    #page-input::-webkit-inner-spin-button { display: none; }
+    .page-of { color: var(--ink-soft); margin-left: 2px; }
+
+    .pdf-filename {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--ink-soft);
+      padding: 2px 0 6px;
+      border-bottom: 1px dashed var(--rule);
+      margin-bottom: 8px;
+      word-break: break-all;
+    }
+
+    .pdf-viewport {
+      position: relative;
+      background: var(--paper-deep);
+      border: 1px solid var(--rule);
+      min-height: 240px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: auto;
+      max-height: 360px;
+    }
+    #pdf-canvas {
+      display: block;
+      cursor: crosshair;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.08), 0 8px 16px -10px rgba(0,0,0,0.2);
+      background: white;
+    }
+    #pdf-canvas[data-loaded="false"] { display: none; }
+
+    .pdf-anchor-marker {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      margin-left: -7px;
+      margin-top: -7px;
+      border: 2px solid var(--accent);
+      border-radius: 50%;
+      pointer-events: none;
+      background: rgba(122, 30, 30, 0.18);
+      animation: pulse 1.6s ease-out 1;
+    }
+    @keyframes pulse {
+      0%   { transform: scale(2.4); opacity: 0; }
+      60%  { opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .pdf-empty { text-align: center; padding: 28px 18px; color: var(--ink-soft); }
+    .pdf-empty-mark {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      color: var(--accent);
+      border: 1.5px solid var(--accent);
+      display: inline-block;
+      padding: 3px 8px;
+      margin-bottom: 10px;
+      transform: rotate(-2deg);
+    }
+    .pdf-empty-text { font-size: 12px; max-width: 240px; margin: 0 auto; }
+
+    .anchor-readout {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      padding: 6px 8px;
+      margin-top: 8px;
+      background: var(--paper-deep);
+      border-left: 3px solid var(--accent);
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+    .anchor-label {
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent-ink);
+    }
+    .anchor-value { flex: 1; }
+    .link-button {
+      background: none;
+      border: none;
+      padding: 0;
+      font: inherit;
+      font-family: var(--font-mono);
+      text-decoration: underline;
+      color: var(--ink-soft);
+      cursor: pointer;
+    }
+    .link-button:hover { color: var(--accent); }
+
+    /* Action button */
+    .action-section { padding: 0 var(--pad) 6px; }
+    .primary-button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--ink);
+      color: var(--paper);
+      border: 1px solid var(--ink);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border-radius: var(--radius);
+    }
+    .primary-button:hover:not(:disabled) {
+      background: var(--accent-ink);
+      border-color: var(--accent-ink);
+    }
+    .primary-button:disabled { opacity: 0.4; cursor: default; }
+    .primary-button-key {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: rgba(255,255,255,0.12);
+      padding: 1px 6px;
+      border-radius: var(--radius);
+    }
+    .help-text { margin: 8px 2px 0; font-size: 11px; color: var(--ink-soft); line-height: 1.5; }
+
+    /* Tie-out list */
+    .tieouts-section { flex: 1; display: flex; flex-direction: column; min-height: 120px; }
+    .tieouts-count {
+      font-family: var(--font-mono);
+      background: var(--ink);
+      color: var(--paper);
+      padding: 1px 6px;
+      font-size: 10px;
+      border-radius: var(--radius);
+    }
+    .tieouts-list { flex: 1; padding: 4px var(--pad) 12px; overflow-y: auto; }
+    .tieouts-empty { font-size: 11px; color: var(--ink-soft); font-style: italic; padding: 8px 0; }
+
+    .tieout-card {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 8px;
+      align-items: start;
+      padding: 8px 10px;
+      border: 1px solid var(--rule);
+      background: var(--paper);
+      margin-bottom: 6px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      position: relative;
+    }
+    .tieout-card:hover { border-color: var(--ink-soft); }
+    .tieout-card[data-active="true"] {
+      border-color: var(--accent);
+      background: var(--paper-deep);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+    .tieout-stamp {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--paper);
+      background: var(--accent);
+      padding: 2px 5px;
+      border-radius: var(--radius);
+      white-space: nowrap;
+    }
+    .tieout-body { min-width: 0; }
+    .tieout-quote {
+      font-size: 12px;
+      color: var(--ink);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      margin-bottom: 4px;
+    }
+    .tieout-source {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--ink-soft);
+      word-break: break-all;
+    }
+    .tieout-source strong { color: var(--ink); font-weight: 500; }
+
+    .tieout-actions { display: flex; flex-direction: column; gap: 4px; }
+    .tieout-action {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      color: var(--ink-soft);
+      background: none;
+      border: 1px solid var(--rule);
+      padding: 2px 6px;
+      cursor: pointer;
+      border-radius: var(--radius);
+      white-space: nowrap;
+    }
+    .tieout-action:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* Status bar */
+    .status-bar {
+      border-top: 1px solid var(--rule);
+      padding: 6px var(--pad);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--ink-soft);
+      letter-spacing: 0.04em;
+      background: var(--paper-deep);
+    }
+    .status-bar[data-tone="error"]    { color: var(--accent); }
+    .status-bar[data-tone="positive"] { color: var(--positive); }
+    .status-bar[data-tone="warn"]     { color: var(--warn); }
+  </style>
+</head>
+<body>
+
+  <div id="app">
+    <header class="masthead">
+      <div class="brand">
+        <span class="brand-mark">§</span>
+        <span class="brand-name">Tie-Out</span>
+      </div>
+      <div class="brand-meta">Phase&nbsp;1 · PDF</div>
+    </header>
+
+    <section class="pdf-section">
+      <div class="section-label">
+        <span>Source</span>
+        <span class="section-label-rule"></span>
+      </div>
+
+      <div class="pdf-controls">
+        <label class="file-button">
+          <input type="file" id="pdf-input" accept="application/pdf" hidden />
+          <span>Load PDF…</span>
+        </label>
+        <div class="page-nav" hidden id="page-nav">
+          <button id="prev-page" type="button" aria-label="Previous page">‹</button>
+          <span class="page-readout">
+            <input type="number" id="page-input" min="1" value="1" />
+            <span class="page-of">/ <span id="page-total">—</span></span>
+          </span>
+          <button id="next-page" type="button" aria-label="Next page">›</button>
+        </div>
+      </div>
+
+      <div class="pdf-filename" id="pdf-filename">No PDF loaded.</div>
+
+      <div class="pdf-viewport" id="pdf-viewport">
+        <canvas id="pdf-canvas"></canvas>
+        <div class="pdf-anchor-marker" id="anchor-marker" hidden></div>
+        <div class="pdf-empty" id="pdf-empty">
+          <div class="pdf-empty-mark">PDF</div>
+          <div class="pdf-empty-text">Load a PDF, then click to drop an anchor, then create a tie-out from your Word selection.</div>
+        </div>
+      </div>
+
+      <div class="anchor-readout" id="anchor-readout" hidden>
+        <span class="anchor-label">Anchor</span>
+        <span class="anchor-value" id="anchor-value"></span>
+        <button id="clear-anchor" type="button" class="link-button">clear</button>
+      </div>
+    </section>
+
+    <section class="action-section">
+      <button id="create-tieout" type="button" class="primary-button" disabled>
+        <span class="primary-button-key">↵</span>
+        <span class="primary-button-label">Create tie-out from selection</span>
+      </button>
+      <p class="help-text">
+        Select text in Word, load a PDF, click on the page to set an anchor, then press the button above.
+      </p>
+    </section>
+
+    <section class="tieouts-section">
+      <div class="section-label">
+        <span>Tie-Outs</span>
+        <span class="tieouts-count" id="tieouts-count">0</span>
+        <span class="section-label-rule"></span>
+      </div>
+      <div class="tieouts-list" id="tieouts-list">
+        <div class="tieouts-empty">No tie-outs yet.</div>
+      </div>
+    </section>
+
+    <footer class="status-bar" id="status-bar">Loading…</footer>
+  </div>
+
+  <!--
+    Application logic.
+    Loaded as type=module so we can `import` PDF.js (an ES module).
+    Everything else is plain JS to avoid a build step.
+  -->
+  <script type="module">
+    import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs";
+
+    // PDF.js needs to know where its worker script lives. Use the matching
+    // version on the same CDN.
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs";
+
+    /* ---------- DOM refs ---------- */
+    const $ = (id) => document.getElementById(id);
+    const dom = {
+      pdfInput:      $("pdf-input"),
+      pdfFilename:   $("pdf-filename"),
+      viewport:      $("pdf-viewport"),
+      canvas:        $("pdf-canvas"),
+      empty:         $("pdf-empty"),
+      pageNav:       $("page-nav"),
+      prevPage:      $("prev-page"),
+      nextPage:      $("next-page"),
+      pageInput:     $("page-input"),
+      pageTotal:     $("page-total"),
+      anchorMarker:  $("anchor-marker"),
+      anchorReadout: $("anchor-readout"),
+      anchorValue:   $("anchor-value"),
+      clearAnchor:   $("clear-anchor"),
+      createBtn:     $("create-tieout"),
+      list:          $("tieouts-list"),
+      count:         $("tieouts-count"),
+      status:        $("status-bar")
+    };
+
+    /* ---------- App state ---------- */
+    const state = {
+      pdfDoc: null,
+      currentPage: 1,
+      currentName: null,
+      currentScale: 1,
+      lastViewport: null,
+      pendingAnchor: null,
+      records: [],
+      activeId: null,
+      selectedFile: null,
+      _renderTask: null
+    };
+
+    /* ---------- Tie-out store (Custom XML Part inside the .docx) ---------- */
+    const NS = "urn:tieout:v1";
+
+    const escXml = (s) => String(s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+
+    function buildXml(records) {
+      const items = records.map(r => `
+  <tieout id="${escXml(r.id)}" ccTag="${escXml(r.ccTag)}" created="${escXml(r.created)}">
+    <quote>${escXml(r.quote)}</quote>
+    <source type="${escXml(r.source.type)}">
+      <path>${escXml(r.source.path)}</path>
+      <name>${escXml(r.source.name)}</name>
+      <page>${escXml(r.source.page)}</page>
+      <x>${escXml(r.source.x)}</x>
+      <y>${escXml(r.source.y)}</y>
+    </source>
+  </tieout>`).join("");
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<tieouts xmlns="${NS}" version="1">${items}
+</tieouts>`;
+    }
+
+    function parseXml(xmlString) {
+      if (!xmlString) return [];
+      const doc = new DOMParser().parseFromString(xmlString, "application/xml");
+      if (doc.querySelector("parsererror")) return [];
+      const out = [];
+      const tags = doc.getElementsByTagNameNS(NS, "tieout");
+      for (let i = 0; i < tags.length; i++) {
+        const t = tags[i];
+        const src = t.getElementsByTagNameNS(NS, "source")[0];
+        const get = (parent, tag) => {
+          const el = parent.getElementsByTagNameNS(NS, tag)[0];
+          return el ? el.textContent : "";
+        };
+        out.push({
+          id: t.getAttribute("id"),
+          ccTag: t.getAttribute("ccTag"),
+          created: t.getAttribute("created"),
+          quote: get(t, "quote"),
+          source: {
+            type: src ? src.getAttribute("type") : "",
+            path: get(src, "path"),
+            name: get(src, "name"),
+            page: parseInt(get(src, "page"), 10) || 1,
+            x: parseFloat(get(src, "x")),
+            y: parseFloat(get(src, "y"))
+          }
+        });
+      }
+      return out;
+    }
+
+    async function findExistingPart(context) {
+      const parts = context.document.customXmlParts.getByNamespace(NS);
+      parts.load("items/id");
+      await context.sync();
+      return parts.items[0] || null;
+    }
+
+    async function loadAllTieOuts() {
+      return Word.run(async (context) => {
+        const part = await findExistingPart(context);
+        if (!part) return [];
+        const xml = part.getXml();
+        await context.sync();
+        return parseXml(xml.value);
+      });
+    }
+
+    async function saveAllTieOuts(records) {
+      return Word.run(async (context) => {
+        const existing = await findExistingPart(context);
+        if (existing) { existing.delete(); await context.sync(); }
+        if (records.length > 0) {
+          context.document.customXmlParts.add(buildXml(records));
+          await context.sync();
+        }
+      });
+    }
+
+    async function upsertTieOut(record) {
+      const all = await loadAllTieOuts();
+      const idx = all.findIndex(r => r.id === record.id);
+      if (idx >= 0) all[idx] = record; else all.push(record);
+      await saveAllTieOuts(all);
+      return all;
+    }
+
+    async function deleteTieOutRecord(id) {
+      const all = await loadAllTieOuts();
+      const remaining = all.filter(r => r.id !== id);
+      await saveAllTieOuts(remaining);
+      return remaining;
+    }
+
+    function newTieOutId() {
+      const rand = Math.random().toString(16).slice(2, 10).padEnd(8, "0");
+      return `to_${rand}`;
+    }
+
+    /* ---------- PDF rendering ---------- */
+    async function loadPdfFromFile(file) {
+      const buf = await file.arrayBuffer();
+      state.pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+      state.currentName = file.name;
+      state.currentPage = 1;
+    }
+
+    async function renderPage(pageNum) {
+      if (!state.pdfDoc) return;
+      const target = Math.max(1, Math.min(pageNum, state.pdfDoc.numPages));
+
+      // Cancel previous render task to avoid "same canvas" errors on rapid nav.
+      if (state._renderTask) {
+        try { state._renderTask.cancel(); } catch (_) {}
+        state._renderTask = null;
+      }
+
+      const page = await state.pdfDoc.getPage(target);
+      const parent = dom.canvas.parentElement;
+      const targetWidth = Math.min(parent.clientWidth - 4, 720);
+      const baseViewport = page.getViewport({ scale: 1 });
+      const scale = targetWidth / baseViewport.width;
+      const viewport = page.getViewport({ scale });
+
+      dom.canvas.width = Math.floor(viewport.width);
+      dom.canvas.height = Math.floor(viewport.height);
+      dom.canvas.dataset.loaded = "true";
+
+      state._renderTask = page.render({
+        canvasContext: dom.canvas.getContext("2d"),
+        viewport
+      });
+      try {
+        await state._renderTask.promise;
+      } catch (e) {
+        if (e && e.name === "RenderingCancelledException") return;
+        throw e;
+      } finally {
+        state._renderTask = null;
+      }
+
+      state.lastViewport = viewport;
+      state.currentPage = target;
+      dom.pageInput.value = target;
+      dom.prevPage.disabled = target === 1;
+      dom.nextPage.disabled = target === state.pdfDoc.numPages;
+      paintPendingAnchorMarker();
+    }
+
+    function canvasClickToAnchor(event) {
+      if (!state.lastViewport) return null;
+      const rect = dom.canvas.getBoundingClientRect();
+      const px = event.clientX - rect.left;
+      const py = event.clientY - rect.top;
+      const xPx = (px / rect.width) * dom.canvas.width;
+      const yPx = (py / rect.height) * dom.canvas.height;
+      return {
+        page: state.currentPage,
+        x: xPx / dom.canvas.width,
+        y: yPx / dom.canvas.height,
+        displayX: px,
+        displayY: py
+      };
+    }
+
+    function anchorToDisplayCoords(anchor) {
+      if (!state.lastViewport || anchor.page !== state.currentPage) return null;
+      const rect = dom.canvas.getBoundingClientRect();
+      return { displayX: anchor.x * rect.width, displayY: anchor.y * rect.height };
+    }
+
+    function paintPendingAnchorMarker() {
+      if (!state.pendingAnchor || state.pendingAnchor.page !== state.currentPage) {
+        dom.anchorMarker.hidden = true;
+        return;
+      }
+      const coords = anchorToDisplayCoords(state.pendingAnchor);
+      if (!coords) { dom.anchorMarker.hidden = true; return; }
+      const canvasRect = dom.canvas.getBoundingClientRect();
+      const vpRect = dom.viewport.getBoundingClientRect();
+      dom.anchorMarker.style.left = `${canvasRect.left - vpRect.left + coords.displayX}px`;
+      dom.anchorMarker.style.top  = `${canvasRect.top  - vpRect.top  + coords.displayY}px`;
+      dom.anchorMarker.hidden = false;
+    }
+
+    function showRecordMarker(rec) {
+      const coords = anchorToDisplayCoords({ page: rec.source.page, x: rec.source.x, y: rec.source.y });
+      if (!coords) { dom.anchorMarker.hidden = true; return; }
+      const canvasRect = dom.canvas.getBoundingClientRect();
+      const vpRect = dom.viewport.getBoundingClientRect();
+      dom.anchorMarker.style.left = `${canvasRect.left - vpRect.left + coords.displayX}px`;
+      dom.anchorMarker.style.top  = `${canvasRect.top  - vpRect.top  + coords.displayY}px`;
+      dom.anchorMarker.hidden = false;
+    }
+
+    function clearPendingAnchor() {
+      state.pendingAnchor = null;
+      dom.anchorMarker.hidden = true;
+      dom.anchorReadout.hidden = true;
+      dom.createBtn.disabled = true;
+    }
+
+    /* ---------- Status helper ---------- */
+    function setStatus(text, tone) {
+      dom.status.textContent = text;
+      if (tone) dom.status.dataset.tone = tone;
+      else delete dom.status.dataset.tone;
+    }
+
+    /* ---------- Tie-out flows ---------- */
+    async function createTieOut() {
+      if (!state.pendingAnchor) {
+        setStatus("Click on the PDF first to set an anchor.", "warn");
+        return;
+      }
+      setStatus("Creating tie-out…");
+      try {
+        const id = newTieOutId();
+        const ccTag = `tieout:${id}`;
+        let quote = "";
+
+        await Word.run(async (context) => {
+          const sel = context.document.getSelection();
+          sel.load("text");
+          await context.sync();
+          if (!sel.text || sel.text.trim().length === 0) {
+            throw new Error("No Word selection. Highlight some text first.");
+          }
+          quote = sel.text.trim();
+          const cc = sel.insertContentControl();
+          cc.tag = ccTag;
+          cc.title = `Tie-out: ${state.selectedFile.name} p.${state.pendingAnchor.page}`;
+          cc.appearance = "BoundingBox";
+          cc.color = "#7a1e1e";
+          await context.sync();
+        });
+
+        const record = {
+          id, ccTag,
+          created: new Date().toISOString(),
+          quote: quote.slice(0, 800),
+          source: {
+            type: "pdf",
+            path: state.selectedFile.name,
+            name: state.selectedFile.name,
+            page: state.pendingAnchor.page,
+            x: Number(state.pendingAnchor.x.toFixed(4)),
+            y: Number(state.pendingAnchor.y.toFixed(4))
+          }
+        };
+        state.records = await upsertTieOut(record);
+        renderList();
+        clearPendingAnchor();
+        setStatus(`Tie-out ${id} created.`, "positive");
+      } catch (err) {
+        console.error(err);
+        setStatus(err.message, "error");
+      }
+    }
+
+    async function jumpToTieOut(id) {
+      const rec = state.records.find(r => r.id === id);
+      if (!rec) return;
+      try {
+        await Word.run(async (context) => {
+          const ccs = context.document.contentControls.getByTag(rec.ccTag);
+          ccs.load("items/id");
+          await context.sync();
+          if (ccs.items.length > 0) {
+            ccs.items[0].select();
+            await context.sync();
+          }
+        });
+      } catch (err) { console.warn("select CC failed:", err); }
+
+      if (state.pdfDoc && state.currentName === rec.source.name) {
+        await renderPage(rec.source.page);
+        state.pendingAnchor = null;
+        showRecordMarker(rec);
+      } else {
+        setStatus(`Open ${rec.source.name} to see this anchor on page ${rec.source.page}.`, "warn");
+      }
+      state.activeId = id;
+      paintActiveCard();
+    }
+
+    function openExternal(id) {
+      const rec = state.records.find(r => r.id === id);
+      if (!rec) return;
+      const path = rec.source.path;
+      let url;
+      if (/^https?:\/\//i.test(path) || /^file:\/\//i.test(path)) {
+        url = path;
+      } else {
+        const normalized = path.replace(/\\/g, "/");
+        url = "file:///" + normalized.replace(/^\/+/, "");
+      }
+      const fullUrl = `${url}#page=${rec.source.page}`;
+      window.open(fullUrl, "_blank", "noopener");
+      setStatus(`Launching: ${fullUrl}`);
+    }
+
+    async function removeTieOut(id) {
+      const rec = state.records.find(r => r.id === id);
+      if (!rec) return;
+      if (!confirm("Delete tie-out and unwrap the Word content control?")) return;
+      setStatus("Deleting…");
+      try {
+        await Word.run(async (context) => {
+          const ccs = context.document.contentControls.getByTag(rec.ccTag);
+          ccs.load("items/id");
+          await context.sync();
+          for (const cc of ccs.items) cc.delete(true);
+          await context.sync();
+        });
+        state.records = await deleteTieOutRecord(id);
+        if (state.activeId === id) state.activeId = null;
+        renderList();
+        setStatus("Deleted.", "positive");
+      } catch (err) {
+        console.error(err);
+        setStatus(err.message, "error");
+      }
+    }
+
+    /* ---------- List rendering ---------- */
+    const escHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+    function cardHtml(r) {
+      const stamp = r.id.replace("to_", "").toUpperCase();
+      return `
+        <div class="tieout-card" data-id="${r.id}" data-active="false">
+          <span class="tieout-stamp">EX&nbsp;${stamp}</span>
+          <div class="tieout-body">
+            <div class="tieout-quote">${escHtml(r.quote)}</div>
+            <div class="tieout-source">
+              <strong>${escHtml(r.source.name)}</strong>&nbsp;·&nbsp;p.${r.source.page}
+            </div>
+          </div>
+          <div class="tieout-actions">
+            <button class="tieout-action" data-action="open-external" data-id="${r.id}">↗ open</button>
+            <button class="tieout-action" data-action="delete" data-id="${r.id}">✕ delete</button>
+          </div>
+        </div>`;
+    }
+
+    function paintActiveCard() {
+      for (const card of dom.list.querySelectorAll(".tieout-card")) {
+        card.dataset.active = String(card.dataset.id === state.activeId);
+      }
+    }
+
+    function renderList() {
+      dom.count.textContent = String(state.records.length);
+      if (state.records.length === 0) {
+        dom.list.innerHTML = `<div class="tieouts-empty">No tie-outs yet.</div>`;
+        return;
+      }
+      const sorted = [...state.records].sort((a, b) => b.created.localeCompare(a.created));
+      dom.list.innerHTML = sorted.map(cardHtml).join("");
+
+      for (const card of dom.list.querySelectorAll(".tieout-card")) {
+        card.addEventListener("click", (e) => {
+          if (e.target.closest(".tieout-action")) return;
+          jumpToTieOut(card.dataset.id);
+        });
+      }
+      for (const btn of dom.list.querySelectorAll('[data-action="open-external"]')) {
+        btn.addEventListener("click", (e) => { e.stopPropagation(); openExternal(btn.dataset.id); });
+      }
+      for (const btn of dom.list.querySelectorAll('[data-action="delete"]')) {
+        btn.addEventListener("click", async (e) => { e.stopPropagation(); await removeTieOut(btn.dataset.id); });
+      }
+      paintActiveCard();
+    }
+
+    /* ---------- Word selection watcher ---------- */
+    async function registerSelectionWatcher() {
+      await Word.run(async (context) => {
+        context.document.onSelectionChanged.add(onSelectionChanged);
+        await context.sync();
+      });
+    }
+
+    async function onSelectionChanged() {
+      try {
+        await Word.run(async (context) => {
+          const sel = context.document.getSelection();
+          const cc = sel.parentContentControlOrNullObject;
+          cc.load("isNullObject,tag");
+          await context.sync();
+          if (!cc.isNullObject && cc.tag && cc.tag.startsWith("tieout:")) {
+            const id = cc.tag.slice("tieout:".length);
+            if (state.activeId !== id) {
+              state.activeId = id;
+              paintActiveCard();
+              const rec = state.records.find(r => r.id === id);
+              if (rec && state.currentName === rec.source.name) {
+                await renderPage(rec.source.page);
+                showRecordMarker(rec);
+              }
+            }
+          } else if (state.activeId !== null) {
+            state.activeId = null;
+            paintActiveCard();
+          }
+        });
+      } catch (err) { /* swallow noisy errors */ }
+    }
+
+    /* ---------- Event wiring ---------- */
+    function debounce(fn, wait) {
+      let t;
+      return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); };
+    }
+
+    dom.pdfInput.addEventListener("change", async (ev) => {
+      const file = ev.target.files && ev.target.files[0];
+      if (!file) return;
+      state.selectedFile = file;
+      setStatus(`Loading ${file.name}…`);
+      try {
+        await loadPdfFromFile(file);
+        dom.pdfFilename.textContent = file.name;
+        dom.empty.hidden = true;
+        dom.pageNav.hidden = false;
+        dom.pageTotal.textContent = state.pdfDoc.numPages;
+        await renderPage(1);
+        setStatus(`Loaded ${file.name} (${state.pdfDoc.numPages} pages).`, "positive");
+      } catch (err) {
+        console.error(err);
+        setStatus(`Failed to load PDF: ${err.message}`, "error");
+      }
+    });
+
+    dom.prevPage.addEventListener("click", () => renderPage(state.currentPage - 1));
+    dom.nextPage.addEventListener("click", () => renderPage(state.currentPage + 1));
+    dom.pageInput.addEventListener("change", () => renderPage(parseInt(dom.pageInput.value, 10)));
+    dom.canvas.addEventListener("click", (ev) => {
+      if (!state.pdfDoc) return;
+      const anchor = canvasClickToAnchor(ev);
+      if (!anchor) return;
+      state.pendingAnchor = anchor;
+      paintPendingAnchorMarker();
+      dom.anchorReadout.hidden = false;
+      dom.anchorValue.textContent =
+        `p.${anchor.page} (${(anchor.x * 100).toFixed(1)}%, ${(anchor.y * 100).toFixed(1)}%)`;
+      dom.createBtn.disabled = false;
+      setStatus("Anchor set. Make a Word selection if you haven't, then create the tie-out.");
+    });
+    dom.clearAnchor.addEventListener("click", clearPendingAnchor);
+    dom.createBtn.addEventListener("click", createTieOut);
+    window.addEventListener("resize", debounce(() => {
+      if (state.pdfDoc) renderPage(state.currentPage);
+    }, 150));
+
+    /* ---------- Office bootstrap ---------- */
+    Office.onReady(async (info) => {
+      if (info.host !== Office.HostType.Word) {
+        setStatus("This add-in must be run inside Word.", "error");
+        return;
+      }
+      try {
+        state.records = await loadAllTieOuts();
+        renderList();
+        await registerSelectionWatcher();
+        setStatus("Ready.");
+      } catch (err) {
+        console.error(err);
+        setStatus(`Init error: ${err.message}`, "error");
+      }
+    });
+  </script>
+</body>
+</html>
