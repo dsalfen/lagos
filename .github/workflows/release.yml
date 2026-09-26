@@ -1,11 +1,13 @@
-# Tag a version (e.g. `git tag v1.0.0 && git push origin v1.0.0`) to publish a GitHub Release
-# with the standalone editor attached. The latest one is always at
+# Publishes a GitHub Release with the standalone editor attached. Either push a version tag
+# (`git tag v1.1.0 && git push origin v1.1.0`), or use Actions → Release → Run workflow, which
+# tags the latest main with the version in package.json. The latest one is always at
 # https://github.com/<owner>/lagos/releases/latest/download/flowchart-editor.html
 name: Release
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -26,4 +28,6 @@ jobs:
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/flowchart-editor.html --title "$GITHUB_REF_NAME" --generate-notes
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then TAG="$GITHUB_REF_NAME"; else TAG="v$(node -p "require('./package.json').version")"; fi
+          gh release create "$TAG" dist/flowchart-editor.html --target "$GITHUB_SHA" --title "$TAG" --generate-notes

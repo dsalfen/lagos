@@ -109,13 +109,10 @@ npm run build       # dist/flowchart-editor.html — the standalone file
 
 ### Releasing
 
-Push a version tag and GitHub Actions tests, builds and publishes a release with
-`flowchart-editor.html` attached:
-
-```
-git tag v1.1.0
-git push origin v1.1.0
-```
+Bump `version` in `package.json`, then on GitHub open **Actions → Release → Run workflow** (on `main`).
+It tests, builds, tags the commit with that version (e.g. `v1.1.0`) and publishes a release with
+`flowchart-editor.html` attached. Pushing a version tag (`git tag v1.1.0 && git push origin v1.1.0`)
+does the same.
 
 The download link above always points at the newest release. Pushes to `main` also run the tests and,
 if Pages is enabled (Settings → Pages → Source: *GitHub Actions*), publish the editor to Pages.
