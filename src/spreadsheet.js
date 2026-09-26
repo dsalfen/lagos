@@ -105,6 +105,7 @@ export async function readXlsx(buffer) {
 export const ROLES = [
   ['ignore', 'Ignore'], ['id', 'Step ID / tag'], ['text', 'Step text'], ['lane', 'Lane (who)'], ['phase', 'Phase / stage'],
   ['shape', 'Shape type'], ['next', 'Next step(s)'], ['prev', 'Previous step(s)'], ['label', 'Connector label'], ['field', 'Detail field'],
+  ['riskNum', 'Risk number (R1, R2…)'], ['controlNum', 'Control number (C1, C2…)'],
 ];
 
 const SYN = {
@@ -115,6 +116,8 @@ const SYN = {
   shape: /^(shape|type|symbol|kind|step ?type|shape ?type)$/,
   next: /^(next|next ?steps?|goes ?to|leads ?to|to|then|successors?|outputs? ?to|connects? ?to|flows? ?to|next ?id)$/,
   prev: /^(prev(ious)?|previous ?steps?|follows|from|predecessors?|after|comes ?from|inputs? ?from)$/,
+  riskNum: /^(key )?risk ?(id|no\.?|#|num(ber)?|ref)$/,
+  controlNum: /^(key )?control ?(id|no\.?|#|num(ber)?|ref)$/,
   label: /^(condition|label|connector ?label|edge ?label|branch|outcome|if|decision ?outcome|flow ?label)$/,
 };
 
@@ -134,7 +137,7 @@ export function guessRoles(headers, rows) {
     const n = norm(h);
     if (!n) { roles[i] = 'ignore'; return; }
     if (n === 'step' || n === 'step #') { roles[i] = looksLikeCodes(col(i)) ? 'id' : 'text'; return; }
-    for (const r of ['id', 'text', 'lane', 'phase', 'shape', 'next', 'prev', 'label']) {
+    for (const r of ['riskNum', 'controlNum', 'id', 'text', 'lane', 'phase', 'shape', 'next', 'prev', 'label']) {
       if (SYN[r].test(n) && !used.has(r)) { roles[i] = r; used.add(r); return; }
     }
     if (n === 'description' && !used.has('text') && !headers.some((x) => SYN.text.test(norm(x)))) { roles[i] = 'text'; used.add('text'); }
@@ -153,7 +156,11 @@ export function guessRoles(headers, rows) {
 // ---------------------------------------------------------------------------
 // building the diagram
 
-const HIGHLIGHT = /risk|issue|gap|deficien|exception|concern|red ?flag/i;
+const RISKY = /risk|issue|gap|deficien|exception|concern|red ?flag/i;
+const CONTROL = /\bcontrols?\b/i;
+const HIGHLIGHT = new RegExp(RISKY.source + '|' + CONTROL.source, 'i');
+// "C1", "C-01" in a Control number column → "1", "01"; anything else is kept as typed
+const badgeNum = (v, letter) => { const m = String(v).trim().match(new RegExp('^' + letter + '\\s*[-.]?\\s*(\\d.*)$', 'i')); return m ? m[1] : String(v).trim(); };
 
 // "CD-03", "Yes: CD-03", "CD-03 (Yes)", "Yes -> CD-03", "~CD-05" (second connector type)
 function parseTargets(cell) {
@@ -187,8 +194,15 @@ export function buildFromRows(rows, roles, { headerRow = true, orientation = 've
       let key = norm(headers[i]).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'field';
       while (seen.has(key)) key += '_';
       seen.add(key);
-      return { key, label: headers[i], highlight: HIGHLIGHT.test(headers[i]), col: i };
+      const control = CONTROL.test(headers[i]) && !RISKY.test(headers[i]);
+      return { key, label: headers[i], highlight: HIGHLIGHT.test(headers[i]), ...(control ? { color: 'var(--control)' } : {}), col: i };
     });
+  }
+  // R and C badges appear automatically where their field has text
+  for (const kind of doc.badgeKinds) {
+    const test = kind.id === 'control' ? (f) => f.color === 'var(--control)' : kind.id === 'risk' ? (f) => f.highlight && !f.color : null;
+    const f = badges && test ? doc.fields.find(test) : null;
+    if (f) kind.field = f.key; else delete kind.field;
   }
   const lanes = new Map(), phases = new Map();
   const get = (r, role) => { const i = idx(role); return i >= 0 ? String(r[i] ?? '').trim() : ''; };
@@ -212,7 +226,12 @@ export function buildFromRows(rows, roles, { headerRow = true, orientation = 've
       phaseIndex: phaseName ? phases.get(phaseName.toLowerCase()).index : undefined,
     };
     for (const f of doc.fields) { const v = String(r[f.col] ?? '').trim(); if (v) node.fields[f.key] = v; }
-    if (badges && doc.fields.some((f) => f.highlight && node.fields[f.key])) node.badges.push('risk');
+    for (const [role, kind, letter] of [['riskNum', 'risk', 'R'], ['controlNum', 'control', 'C']]) {
+      const v = get(r, role);
+      if (!v) continue;
+      (node.badgeNums ||= {})[kind] = badgeNum(v, letter);
+      if (badges && !doc.badgeKinds.find((k) => k.id === kind)?.field) node.badges.push(kind);
+    }
     nodes.push({ node, row: r, n });
     if (idv) byKey.set(idv.toLowerCase(), node);
     if (!byKey.has(text.toLowerCase())) byKey.set(text.toLowerCase(), node);
@@ -264,11 +283,11 @@ export function buildFromRows(rows, roles, { headerRow = true, orientation = 've
   return { doc: out, warnings, stats: { steps: out.nodes.length, lanes: out.lanes.items.length, phases: out.phases.items.length, connectors: out.edges.length } };
 }
 
-export const EXAMPLE_CSV = `Step,Activity,Owner,Phase,Type,Next,What happens,Risk
-CD-00,Start,Requester,Approve,start,CD-01,,
-CD-01,Submit invoice,Requester,Approve,manual input,CD-02,Requester uploads the supplier invoice to the AP inbox.,
-CD-02,Match PO?,AP,Approve,decision,Yes: CD-03; No: CD-01,AP matches the invoice to the purchase order and receipt.,Invoices without a PO could be paid.
-CD-03,Schedule payment,AP,Pay,process,CD-04; ~posts: ERP,AP schedules the invoice in the next payment run.,
-ERP,ERP,AP,Pay,data store,,Invoices and payments are recorded in the ERP.,
-CD-04,Release payment,Treasury,Pay,process,CD-05,Treasury releases the payment run.,Payments could be released without approval.
-CD-05,Paid,Treasury,Pay,end,,,`;
+export const EXAMPLE_CSV = `Step,Activity,Owner,Phase,Type,Next,What happens,Control,Control #,Risk
+CD-00,Start,Requester,Approve,start,CD-01,,,,
+CD-01,Submit invoice,Requester,Approve,manual input,CD-02,Requester uploads the supplier invoice to the AP inbox.,,,
+CD-02,Match PO?,AP,Approve,decision,Yes: CD-03; No: CD-01,AP matches the invoice to the purchase order and receipt.,"Three-way match of invoice, PO and receipt before approval.",C1,Invoices without a PO could be paid.
+CD-03,Schedule payment,AP,Pay,process,CD-04; ~posts: ERP,AP schedules the invoice in the next payment run.,,,
+ERP,ERP,AP,Pay,data store,,Invoices and payments are recorded in the ERP.,,,
+CD-04,Release payment,Treasury,Pay,process,CD-05,Treasury releases the payment run.,Payment run approved by a second signatory in the bank portal.,C2,Payments could be released without approval.
+CD-05,Paid,Treasury,Pay,end,,,,,`;

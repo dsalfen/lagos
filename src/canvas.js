@@ -3,7 +3,7 @@ import {
   app, emit, change, commitFrom, snapshot, select, toggleSelect, clearSelection,
   nodeById, edgeById, selectedNodes,
 } from './state.js';
-import { renderDiagram, computeRoutes, renderNode, renderEdge, renderLabel, nodeStyle, labelGeometry, fontFor, esc, fitNodeText } from './render.js';
+import { renderDiagram, computeRoutes, renderNode, renderEdge, renderLabel, nodeStyle, labelGeometry, fontFor, esc, fitNodeText, jumpSize } from './render.js';
 import {
   portPoint, projectOnPolyline, simplify, center, unionBox, pathD,
 } from './geometry.js';
@@ -86,10 +86,12 @@ function patchCanvas() {
     if (drag.type === 'resize') replaceMarkup(el, renderNode(doc, n, opts));
     else el.setAttribute('transform', `translate(${Math.round(n.x * 100) / 100} ${Math.round(n.y * 100) / 100})`);
   }
+  const hopKey = (m, id) => JSON.stringify(m?.get(id) || []);
   for (const e of doc.edges) {
     const r = routes.get(e.id);
-    if (r === last.routes.get(e.id)) continue;
-    replaceMarkup(q(`[data-edge="${CSS.escape(e.id)}"]`), renderEdge(doc, e, r, opts));
+    const hopsChanged = hopKey(routes.jumps, e.id) !== hopKey(last.routes.jumps, e.id);
+    if (r === last.routes.get(e.id) && !hopsChanged) continue;
+    replaceMarkup(q(`[data-edge="${CSS.escape(e.id)}"]`), renderEdge(doc, e, r, opts, routes.jumps?.get(e.id)));
     const lab = q(`[data-label="${CSS.escape(e.id)}"]`);
     const markup = renderLabel(doc, e, r, opts);
     if (lab) { if (markup) replaceMarkup(lab, markup); else lab.remove(); }
@@ -173,7 +175,7 @@ export function renderOverlay() {
   for (const e of selEdges) {
     const r = last.routes.get(e.id);
     if (!r) continue;
-    o += `<path class="ov-halo" d="${pathD(r, doc.settings.cornerRadius)}" stroke-width="${7 * s}"/>`;
+    o += `<path class="ov-halo" d="${pathD(r, doc.settings.cornerRadius, last.routes.jumps?.get(e.id), jumpSize(doc))}" stroke-width="${7 * s}"/>`;
   }
   if (selEdges.length === 1 && !sel.length && !(drag && drag.hideHandles)) {
     const e = selEdges[0];

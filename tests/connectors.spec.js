@@ -206,7 +206,7 @@ test('auto routing avoids shapes in every template', async ({ page }) => {
   await load(page, 'blank');
   const ids = await page.evaluate(() => window.fc.templates);
   for (const id of ids) {
-    await page.evaluate((i) => window.fc.loadTemplate(i), id);
+    await page.evaluate((i) => { window.fc.loadTemplate(i); window.fc.getDoc().settings.lineJumps = 'none'; window.fc.renderCanvas(); }, id);
     const hits = await page.evaluate(() => {
       const d = window.fc.getDoc();
       const out = [];

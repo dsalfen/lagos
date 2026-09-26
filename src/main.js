@@ -531,7 +531,7 @@ function openSheetImport(file) {
       h('button', { type: 'button', id: 'sheet-example', onclick: () => { paste.value = EXAMPLE_CSV; load(parseDelimited(EXAMPLE_CSV), 'Cash disbursements walkthrough'); } }, 'Use example'),
       h('button', { type: 'button', onclick: () => download('flowchart-import-example.csv', EXAMPLE_CSV, 'text/csv') }, 'Download example CSV')),
     fileIn, paste,
-    h('div', { style: 'margin-top:6px' }, opt('First row is headers', hdr), opt('Connect rows in order if there is no Next column', seq), opt('R badge on rows with a risk', bdg), ori),
+    h('div', { style: 'margin-top:6px' }, opt('First row is headers', hdr), opt('Connect rows in order if there is no Next column', seq), opt('R / C badges on rows with a risk or control', bdg), ori),
     mapBox, summary, warn,
     h('div', { class: 'modal-actions' }, h('button', { type: 'button', onclick: closeModal }, 'Cancel'), create),
   ]);
@@ -544,7 +544,7 @@ function openOutline() {
   openModal([
     h('h2', {}, 'Import from text outline'),
     h('p', { class: 'hint-text' },
-      'One shape per line as ', h('code', {}, 'id: Text {shape} #TAG !R'), ', indented ', h('code', {}, 'field: value'),
+      'One shape per line as ', h('code', {}, 'id: Text {shape} #TAG !R !C1'), ', indented ', h('code', {}, 'field: value'),
       ' lines add details, ', h('code', {}, '[Lane]'), ' switches lane, ', h('code', {}, 'a -> b : label'), ' connects (', h('code', {}, '-.->'), ' for the second connector type). Shapes are laid out automatically.'),
     ta, err,
     h('div', { class: 'modal-actions' },

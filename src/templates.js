@@ -2,22 +2,22 @@ import { emptyDoc, normalizeDoc, defaultFields } from './model.js';
 import { parseDelimited, guessRoles, buildFromRows } from './spreadsheet.js';
 
 // A fictional audit walkthrough, built from spreadsheet-style rows (the same path as File → Import spreadsheet).
-const WALKTHROUGH_ROWS = `Step,Activity,Owner,Phase,Type,Next,What happens,System / data,Output,Risk point to probe
-START,Customer places order,Customer,Order,start,OTC-01,,,,
-OTC-01,Receive purchase order,Sales,Order,manual input,OTC-02,"Orders arrive by email or through the web shop. Emailed orders are keyed into the order system by the sales desk.",Web shop; order system,Sales order,Orders keyed in by hand could be entered with the wrong quantity or price.
-OTC-02,Within credit limit?,Finance,Order,decision,Yes: OTC-04; No: OTC-03,"Finance compares the order value and overdue balance with the customer's credit limit. Orders over the limit are held.",Order system credit screen,Released or held order,Orders could be released to customers who are over their credit limit.
-OTC-03,Hold order and contact customer,Sales,Order,process,Cleared: OTC-02,"Sales contacts the customer to collect the overdue balance or agree a prepayment, then asks Finance to re-check.",Email; CRM notes,Cleared or cancelled order,
-OTC-04,Pick and pack,Warehouse,Fulfil,process,OTC-05,"The warehouse picks the released order and checks the items against the packing list.",Warehouse system,Packed order,
-OTC-05,Ship and record delivery,Warehouse,Fulfil,data,OTC-06; ~delivery data: OTC-07,"The carrier collects the parcel; the shipment is confirmed in the warehouse system, which passes delivery data to Finance.",Warehouse system → accounting system,Proof of delivery,Goods could be shipped without being recorded.
-OTC-06,Customer receives goods,Customer,Fulfil,process,,The customer signs for the delivery.,Carrier portal,Signed delivery note,
-OTC-07,Raise invoice,Finance,Bill and collect,document,OTC-08,"Invoices are generated from confirmed shipments at the agreed price.",Accounting system,Customer invoice,Shipped orders might not be invoiced (completeness).
-OTC-08,Send invoice,Finance,Bill and collect,process,OTC-09,Invoices are emailed to the customer's accounts payable address.,Accounting system; email,Sent invoice,
-OTC-09,Customer pays,Customer,Bill and collect,process,OTC-10,The customer pays by bank transfer quoting the invoice number.,Bank,Payment,
-OTC-10,Apply cash to invoices,Finance,Bill and collect,database,OTC-11,Receipts from the daily bank file are matched to open invoices.,Bank file; accounting system,Updated receivables,Cash could be applied to the wrong customer or invoice.
-OTC-11,Paid in full?,Finance,Bill and collect,decision,Yes: OTC-13; No: OTC-12,"Short payments and overdue invoices appear on the aged receivables report.",Aged receivables report,Closed or open balance,
-OTC-12,Chase overdue balance,Sales,Bill and collect,process,Reminder: OTC-09,Sales follows up overdue balances with the customer.,Email; CRM notes,Payment promise,
-OTC-13,Reconcile receivables to ledger,Finance,Bill and collect,process,END,"Monthly reconciliation of the receivables subledger to the general ledger. Who reviews it has not been confirmed yet.",Accounting system; spreadsheet,Reconciliation (to be confirmed),The receivables subledger might not agree to the ledger.
-END,Order closed,Finance,Bill and collect,end,,,,,`;
+const WALKTHROUGH_ROWS = `Step,Activity,Owner,Phase,Type,Next,What happens,System / data,Output,Control,Control #,Risk point to probe
+START,Customer places order,Customer,Order,start,OTC-01,,,,,,
+OTC-01,Receive purchase order,Sales,Order,manual input,OTC-02,Orders arrive by email or through the web shop. Emailed orders are keyed into the order system by the sales desk.,Web shop; order system,Sales order,,,Orders keyed in by hand could be entered with the wrong quantity or price.
+OTC-02,Within credit limit?,Finance,Order,decision,Yes: OTC-04; No: OTC-03,Finance compares the order value and overdue balance with the customer's credit limit. Orders over the limit are held.,Order system credit screen,Released or held order,Orders over the credit limit are blocked automatically until Finance approves the release.,C1,Orders could be released to customers who are over their credit limit.
+OTC-03,Hold order and contact customer,Sales,Order,process,Cleared: OTC-02,"Sales contacts the customer to collect the overdue balance or agree a prepayment, then asks Finance to re-check.",Email; CRM notes,Cleared or cancelled order,,,
+OTC-04,Pick and pack,Warehouse,Fulfil,process,OTC-05,The warehouse picks the released order and checks the items against the packing list.,Warehouse system,Packed order,,,
+OTC-05,Ship and record delivery,Warehouse,Fulfil,data,OTC-06; ~delivery data: OTC-07,"The carrier collects the parcel; the shipment is confirmed in the warehouse system, which passes delivery data to Finance.",Warehouse system → accounting system,Proof of delivery,,,Goods could be shipped without being recorded.
+OTC-06,Customer receives goods,Customer,Fulfil,process,,The customer signs for the delivery.,Carrier portal,Signed delivery note,,,
+OTC-07,Raise invoice,Finance,Bill and collect,document,OTC-08,Invoices are generated from confirmed shipments at the agreed price.,Accounting system,Customer invoice,Weekly report of shipped but not invoiced orders is reviewed by the billing lead.,C2,Shipped orders might not be invoiced (completeness).
+OTC-08,Send invoice,Finance,Bill and collect,process,OTC-09,Invoices are emailed to the customer's accounts payable address.,Accounting system; email,Sent invoice,,,
+OTC-09,Customer pays,Customer,Bill and collect,process,OTC-10,The customer pays by bank transfer quoting the invoice number.,Bank,Payment,,,
+OTC-10,Apply cash to invoices,Finance,Bill and collect,database,OTC-11,Receipts from the daily bank file are matched to open invoices.,Bank file; accounting system,Updated receivables,Unapplied cash is reviewed and cleared daily; exceptions go to the Finance manager.,C3,Cash could be applied to the wrong customer or invoice.
+OTC-11,Paid in full?,Finance,Bill and collect,decision,Yes: OTC-13; No: OTC-12,Short payments and overdue invoices appear on the aged receivables report.,Aged receivables report,Closed or open balance,,,
+OTC-12,Chase overdue balance,Sales,Bill and collect,process,Reminder: OTC-09,Sales follows up overdue balances with the customer.,Email; CRM notes,Payment promise,,,
+OTC-13,Reconcile receivables to ledger,Finance,Bill and collect,process,END,Monthly reconciliation of the receivables subledger to the general ledger. Who reviews it has not been confirmed yet.,Accounting system; spreadsheet,Reconciliation (to be confirmed),,,The receivables subledger might not agree to the ledger.
+END,Order closed,Finance,Bill and collect,end,,,,,,,`;
 
 function walkthrough() {
   const rows = parseDelimited(WALKTHROUGH_ROWS);
@@ -28,7 +28,7 @@ function walkthrough() {
   doc.edges.forEach((e) => { e.from.node = ids.get(e.from.node); e.to.node = ids.get(e.to.node); });
   const tbc = doc.nodes.find((n) => n.id === 'OTC-13');
   tbc.style = { dash: '5 4' };
-  doc.subtitle = 'Fictional example · Steps OTC-01 to OTC-13 · shows lanes, phases, risk points and step details';
+  doc.subtitle = 'Fictional example · Steps OTC-01 to OTC-13 · shows lanes, phases, controls, risk points and step details';
   doc.notes = 'Everything here is invented to show what the editor can do.\nOTC-13 has a dashed outline because its review has not been confirmed yet.';
   doc.settings.detailHint = 'Select any shape to see what happens at that step.';
   doc.settings.initialSelection = 'OTC-02';
@@ -112,5 +112,5 @@ export const TEMPLATES = [
   { id: 'basic', name: 'Basic flowchart', desc: 'Start, steps, a decision and a loop.', make: basicFlow },
   { id: 'swim', name: 'Swimlanes (columns)', desc: 'Three vertical lanes for hand-offs between teams.', make: () => swimlane(false) },
   { id: 'swimh', name: 'Swimlanes (rows)', desc: 'Three horizontal lanes, flow left to right.', make: () => swimlane(true) },
-  { id: 'walkthrough', name: 'Audit walkthrough (example)', desc: 'Order-to-cash example with lanes, phases, risk points and step details.', make: walkthrough },
+  { id: 'walkthrough', name: 'Audit walkthrough (example)', desc: 'Order-to-cash example with lanes, phases, controls, risk points and step details.', make: walkthrough },
 ];

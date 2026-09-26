@@ -86,9 +86,10 @@ function colorField(value, swatches, onPick, { allowDefault = true, name = 'colo
 const SWATCH_NAMES = {
   'var(--node)': 'Theme: shape', 'var(--dec)': 'Theme: decision tint', 'var(--term)': 'Theme: grey tint', 'var(--note)': 'Theme: note yellow',
   'var(--sel-fill)': 'Theme: highlight', 'var(--node-stroke)': 'Theme: outline', 'var(--flow)': 'Theme: flow blue', 'var(--feed)': 'Theme: feed grey',
-  'var(--risk)': 'Theme: risk red', 'var(--ink)': 'Theme: text', 'var(--muted)': 'Theme: muted text', 'var(--lane)': 'Theme: lane',
+  'var(--risk)': 'Theme: risk red', 'var(--control)': 'Theme: control green', 'var(--ink)': 'Theme: text', 'var(--muted)': 'Theme: muted text', 'var(--lane)': 'Theme: lane',
   'var(--lane-alt)': 'Theme: alternate lane', 'var(--lane-head)': 'Theme: lane header', transparent: 'Transparent', none: 'No border',
 };
+const HIGHLIGHTS = ['var(--risk)', 'var(--control)', 'var(--flow)', '#B7791F', '#6A1B9A'];
 const DASHES = [['', 'Solid'], ['6 4', 'Dashed'], ['2 3', 'Dotted'], ['10 4 2 4', 'Dash-dot']];
 
 export function initInspector() {
@@ -146,13 +147,40 @@ function styleSection(nodes) {
   );
 }
 
+// Updates the badge ticks while a linked detail field is typed into (the panel is not rebuilt while typing).
+let refreshBadges = () => {};
+
 function badgesSection(nodes) {
+  refreshBadges = () => {};
   if (!app.doc.badgeKinds.length) return null;
-  return section('Badges',
-    ...app.doc.badgeKinds.map((b) => check(`${b.text} · ${b.name}`, nodes.every((n) => n.badges.includes(b.id)), (on) => {
+  const fieldLabel = (key) => app.doc.fields.find((f) => f.key === key)?.label || key;
+  const rows = app.doc.badgeKinds.map((b) => {
+    const box = check(`${b.text} · ${b.name}`, false, (on) => {
       nodes.forEach((n) => { n.badges = n.badges.filter((x) => x !== b.id); if (on) n.badges.push(b.id); });
-    }, { 'data-badge-toggle': b.id })),
-  );
+    }, { 'data-badge-toggle': b.id });
+    const nums = new Set(nodes.map((n) => String(n.badgeNums?.[b.id] ?? '')));
+    const no = text(nums.size === 1 ? [...nums][0] : '', (v) => {
+      for (const n of nodes) {
+        n.badgeNums = { ...(n.badgeNums || {}) };
+        if (String(v).trim()) n.badgeNums[b.id] = String(v).trim(); else delete n.badgeNums[b.id];
+        if (!Object.keys(n.badgeNums).length) delete n.badgeNums;
+      }
+    }, { class: 'fixed', style: 'width:52px', maxlength: 6, placeholder: 'No.', title: `Number shown after ${b.text}, e.g. ${b.text}1`, 'aria-label': `${b.name} number`, 'data-badge-num': b.id });
+    const note = h('p', { class: 'hint-text', style: 'margin:0 0 4px 22px' }, `automatic: ${fieldLabel(b.field)} has text`);
+    const update = () => {
+      // shown automatically because its linked field has text on every selected shape
+      const auto = !!b.field && nodes.every((n) => String(n.fields?.[b.field] ?? '').trim());
+      const manual = nodes.every((n) => n.badges.includes(b.id));
+      const inp = box.querySelector('input');
+      inp.checked = manual || auto;
+      inp.disabled = auto && !manual;
+      note.hidden = !(auto && !manual);
+    };
+    update();
+    return { el: h('div', {}, h('div', { class: 'row' }, box, no), note), update };
+  });
+  refreshBadges = () => rows.forEach((r) => r.update());
+  return section('Badges', rows.map((r) => r.el));
 }
 
 function shapeSelect(value, onPick) {
@@ -191,7 +219,7 @@ function nodeInspector(n) {
   out.push(badgesSection([n]));
   const fields = app.doc.fields;
   out.push(section(h('span', {}, 'Details ', h('span', { class: 'muted' }, '(shown in preview/export)')),
-    ...fields.map((f) => field(f.label, area(n.fields[f.key], (v) => { n.fields = { ...n.fields, [f.key]: v }; if (!v) delete n.fields[f.key]; }, { 'data-field': f.key }), 'stack')),
+    ...fields.map((f) => field(f.label, area(n.fields[f.key], (v) => { n.fields = { ...n.fields, [f.key]: v }; if (!v) delete n.fields[f.key]; refreshBadges(); }, { 'data-field': f.key }), 'stack')),
     field('Lane label', text(n.laneLabel, (v) => { if (v) n.laneLabel = v; else delete n.laneLabel; }, { placeholder: lane?.title || 'override lane name in details' })),
     h('div', { class: 'btns' }, btn('Edit detail fields…', () => { clearSelection(); setTimeout(() => document.querySelector('[data-sec="fields"]')?.scrollIntoView(), 0); })),
   ));
@@ -496,6 +524,9 @@ function docInspector() {
     check('Show tags / IDs on shapes', S.showTags, (v) => { S.showTags = v; }, { id: 'set-tags' }),
     field('Corners', num(S.cornerRadius, (v) => { S.cornerRadius = Math.max(0, v); }, { min: 0, max: 30, title: 'Rounded connector corners', id: 'set-corner' })),
     field('V. labels', selectEl([['horizontal', 'Keep horizontal'], ['rotate', 'Rotate along line']], S.verticalLabels || 'horizontal', (v) => { S.verticalLabels = v; }, { title: 'Labels on long vertical connector runs', id: 'set-vlabels' })),
+    field('Line hops', h('div', { class: 'row' },
+      selectEl([['arc', 'Arc over crossings'], ['none', 'None']], S.lineJumps || 'arc', (v) => { S.lineJumps = v; }, { id: 'set-hops', 'aria-label': 'Line hops' }),
+      num(S.jumpSize ?? 5, (v) => { S.jumpSize = Math.max(2, Math.min(12, v)); }, { class: 'fixed', style: 'width:56px', min: 2, max: 12, 'aria-label': 'Hop size', title: 'Hop radius (px)' }))),
     field('Stub', num(S.stub, (v) => { S.stub = Math.max(4, v); }, { min: 4, max: 80, title: 'How far connectors leave a shape before turning' })),
   ));
   out.push(section('Lanes',
@@ -528,7 +559,8 @@ function docInspector() {
     h('p', { class: 'hint-text' }, 'Each shape can hold these fields. They appear in the details panel of the preview and exported page.'),
     listEditor(doc.fields, (f) => h('div', {},
       h('div', { class: 'row' }, text(f.label, (v) => { f.label = v; }, { 'aria-label': 'Field label' })),
-      check('Highlight (e.g. risks)', f.highlight, (v) => { f.highlight = v; })),
+      check('Highlight (e.g. risks)', f.highlight, (v) => { f.highlight = v; }),
+      f.highlight ? colorField(f.color || '', HIGHLIGHTS, (v) => { f.color = v || undefined; }, { name: 'field-' + f.key }) : null),
     () => { doc.fields.push({ key: uid('f'), label: 'New field' }); }, '+ Add field', { id: 'fields-list' }),
     field('Hint', text(S.detailHint, (v) => { S.detailHint = v; })),
     field('No tag', text(S.noTagLabel, (v) => { S.noTagLabel = v; }, { placeholder: 'heading for untagged shapes', id: 'set-notag' })),
@@ -547,8 +579,10 @@ function docInspector() {
   out.push(section('Badges',
     listEditor(doc.badgeKinds, (b) => h('div', {},
       h('div', { class: 'row' }, text(b.text, (v) => { b.text = v; }, { class: 'fixed', style: 'width:44px', maxlength: 3, 'aria-label': 'Badge text' }), text(b.name, (v) => { b.name = v; }, { 'aria-label': 'Badge meaning' })),
-      colorField(b.color, ['var(--risk)', 'var(--flow)', '#2E7D32', '#B7791F', '#6A1B9A', '#0B7285', '#C2185B'], (v) => { b.color = v || 'var(--risk)'; }, { allowDefault: false, name: 'badge-' + b.id })),
-    () => { doc.badgeKinds.push({ id: uid('b'), text: 'C', name: 'Control', color: '#2E7D32' }); }, '+ Add badge'),
+      field('Auto', selectEl([['', 'Only when ticked'], ...doc.fields.map((f) => [f.key, `When “${f.label}” has text`])], b.field || '',
+        (v) => { if (v) b.field = v; else delete b.field; }, { 'aria-label': 'Show automatically', title: 'Show this badge automatically on shapes where this detail field has text', 'data-badge-field': b.id })),
+      colorField(b.color, ['var(--risk)', 'var(--control)', 'var(--flow)', '#2E7D32', '#B7791F', '#6A1B9A', '#0B7285', '#C2185B'], (v) => { b.color = v || 'var(--risk)'; }, { allowDefault: false, name: 'badge-' + b.id })),
+    () => { doc.badgeKinds.push({ id: uid('b'), text: 'B', name: 'New badge', color: '#B7791F' }); }, '+ Add badge'),
   ));
   const used = [...new Set(doc.nodes.map((n) => n.shape))].filter((k) => !SHAPES[k]?.noLegend);
   out.push(section('Legend',

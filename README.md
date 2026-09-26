@@ -2,7 +2,7 @@
 
 Lagos is a flowchart editor that runs entirely in your browser from **one HTML file**. No install,
 no account, no server, and no internet connection needed. It is built for process walkthroughs:
-swimlanes, phases, step numbers, risk markers and a click-to-see-details view you can share.
+swimlanes, phases, step numbers, risk and control markers and a click-to-see-details view you can share.
 
 ![Lagos editor with the example audit walkthrough](docs/screenshot.png)
 
@@ -34,10 +34,15 @@ If GitHub Pages is enabled for this repository, the editor also runs online at
   or business days). Rename, recolour, reorder and resize them; shapes move with their lane.
 - **Connectors** — routed automatically around shapes, or straight or curved. Drag segments to reroute,
   drag ends to reconnect, drag labels along the line. Named connector types (e.g. *Flow* and a dashed
-  *Information feed*) drive the legend.
-- **Step details** — define your own fields (e.g. *What happens*, *System*, *Risk point*), highlight the
-  important ones, and add badges such as a red **R** and step numbers like `STEP-08`. Readers click a
+  *Information feed*) drive the legend. Where connectors cross, the line hops over with a small arc
+  (can be turned off or resized in the document settings).
+- **Step details** — define your own fields (e.g. *What happens*, *System*, *Control*, *Risk point*),
+  highlight the important ones in their own colour, and add step numbers like `STEP-08`. Readers click a
   shape (or connector) in the exported page to see its details.
+- **Risk and control points** — a red **R** and a green **C** badge appear on a shape automatically
+  when its *Risk* or *Control* field has text, and are listed in the legend. Give them an optional number
+  (**R2**, **C1**) in the shape's Badges section; the details panel then shows e.g. *Control (C1)*. Link
+  badges to other fields, or add your own badges, in the document settings.
 - **Fast editing** — arrows next to a selected shape add the next step (hover to pick its type), type to
   replace text, format painter, snapping and alignment guides, align/distribute, auto-numbering,
   auto-layout, copy/paste, undo/redo, search and a right-click menu. Press `?` for all shortcuts.
@@ -57,7 +62,8 @@ re-map them in the import dialog):
 | Phase / Stage | The phase band |
 | Type | Shape: `process`, `decision`, `start`, `end`, `document`, `data`, `manual input`, `data store`, … |
 | Next | Following step(s), separated by `;`, with optional labels: `Yes: P2P-05; No: P2P-02`. Prefix `~` for a dashed information feed. |
-| anything else | Becomes a detail field. Columns with "risk" in the name are highlighted and add the R badge. |
+| Control # / Risk # | Badge numbers: `C1`, `2`, … show as **C1**, **R2** |
+| anything else | Becomes a detail field. Columns with "risk" in the name are highlighted red and add the R badge; columns with "control" in the name are highlighted green and add the C badge. |
 
 The dialog has an example and a downloadable example CSV to start from. There is also
 **Import from text outline** for quick sketches.
@@ -107,8 +113,8 @@ Push a version tag and GitHub Actions tests, builds and publishes a release with
 `flowchart-editor.html` attached:
 
 ```
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
 The download link above always points at the newest release. Pushes to `main` also run the tests and,

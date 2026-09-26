@@ -431,7 +431,7 @@ export function routeEdge(edge, nodes, obstacleList, settings = {}, ctx = {}) {
 
 // ---- path strings ------------------------------------------------------------
 
-export function pathD(route, cornerRadius = 0) {
+export function pathD(route, cornerRadius = 0, jumps = null, jumpSize = 5) {
   const pts = route.pts;
   if (pts.length < 2) return '';
   if (route.routing === 'curved') {
@@ -452,18 +452,93 @@ export function pathD(route, cornerRadius = 0) {
     }
     return d;
   }
-  if (!cornerRadius || pts.length < 3) return 'M' + pts.map((p) => p.join(' ')).join('L');
-  let d = `M${pts[0][0]} ${pts[0][1]}`;
+  if ((!cornerRadius || pts.length < 3) && !(jumps && jumps.length)) return 'M' + pts.map((p) => p.join(' ')).join('L');
+  // corners: rounded (p before the corner, q after) or sharp (p = q = the corner)
+  const corner = [];
   for (let i = 1; i < pts.length - 1; i++) {
     const a = pts[i - 1], b = pts[i], c = pts[i + 1];
     const l1 = Math.hypot(b[0] - a[0], b[1] - a[1]), l2 = Math.hypot(c[0] - b[0], c[1] - b[1]);
-    const r = Math.min(cornerRadius, l1 / 2, l2 / 2);
-    const p = [b[0] - ((b[0] - a[0]) / l1) * r, b[1] - ((b[1] - a[1]) / l1) * r];
-    const q = [b[0] + ((c[0] - b[0]) / l2) * r, b[1] + ((c[1] - b[1]) / l2) * r];
-    d += `L${round(p[0])} ${round(p[1])}Q${b[0]} ${b[1]} ${round(q[0])} ${round(q[1])}`;
+    const r = Math.min(cornerRadius || 0, l1 / 2, l2 / 2);
+    corner[i] = r > 0
+      ? { p: [b[0] - ((b[0] - a[0]) / l1) * r, b[1] - ((b[1] - a[1]) / l1) * r], q: [b[0] + ((c[0] - b[0]) / l2) * r, b[1] + ((c[1] - b[1]) / l2) * r], b }
+      : { p: b, q: b, b };
   }
-  const z = pts[pts.length - 1];
-  return d + `L${z[0]} ${z[1]}`;
+  const bySeg = new Map();
+  for (const j of jumps || []) { if (!bySeg.has(j.seg)) bySeg.set(j.seg, []); bySeg.get(j.seg).push(j); }
+  let d = `M${pts[0][0]} ${pts[0][1]}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const start = i === 0 ? pts[0] : corner[i].q;
+    const end = i === pts.length - 2 ? pts[pts.length - 1] : corner[i + 1].p;
+    const len = Math.hypot(end[0] - start[0], end[1] - start[1]);
+    const js = bySeg.get(i);
+    if (js && len > 0) {
+      // line hops: a small arc over each crossing, bulging upward whichever way the line runs
+      const ux = (end[0] - start[0]) / len, uy = (end[1] - start[1]) / len;
+      const sweep = ux >= 0 ? 1 : 0;
+      const along = js.map((j) => ({ j, t: (j.x - start[0]) * ux + (j.y - start[1]) * uy })).sort((a, b) => a.t - b.t);
+      let lastT = -Infinity;
+      for (const { j, t } of along) {
+        if (t - jumpSize < Math.max(1, lastT) || t + jumpSize > len - 1) continue; // too close to a corner or the previous hop
+        d += `L${round(j.x - ux * jumpSize)} ${round(j.y - uy * jumpSize)}A${jumpSize} ${jumpSize} 0 0 ${sweep} ${round(j.x + ux * jumpSize)} ${round(j.y + uy * jumpSize)}`;
+        lastT = t + jumpSize;
+      }
+    }
+    d += `L${round(end[0])} ${round(end[1])}`;
+    if (i < pts.length - 2 && corner[i + 1].p !== corner[i + 1].q) d += `Q${corner[i + 1].b[0]} ${corner[i + 1].b[1]} ${round(corner[i + 1].q[0])} ${round(corner[i + 1].q[1])}`;
+  }
+  return d;
+}
+
+// Where connectors cross, the more horizontal one hops over the other (horizontal over vertical
+// for elbow connectors). Curved connectors neither hop nor are hopped over. Crossings near a
+// segment's ends (corners, ports) are ignored. Returns Map(edgeId -> [{seg, x, y}]).
+export function findJumps(routes, size = 5) {
+  const m = size + 2;
+  const H = [], V = [], D = [];
+  for (const [id, r] of routes) {
+    if (r.routing === 'curved') continue;
+    const pts = r.pts;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const seg = { id, i, a, b };
+      if (Math.abs(a[1] - b[1]) < 0.5) H.push({ ...seg, y: a[1], x0: Math.min(a[0], b[0]), x1: Math.max(a[0], b[0]) });
+      else if (Math.abs(a[0] - b[0]) < 0.5) V.push({ ...seg, x: a[0], y0: Math.min(a[1], b[1]), y1: Math.max(a[1], b[1]) });
+      else D.push(seg);
+    }
+  }
+  const out = new Map();
+  const add = (id, seg, x, y) => { if (!out.has(id)) out.set(id, []); out.get(id).push({ seg, x, y }); };
+  // horizontal over vertical: sweep vertical segments sorted by x
+  V.sort((p, q) => p.x - q.x);
+  const firstAtLeast = (x) => { let lo = 0, hi = V.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (V[mid].x < x) lo = mid + 1; else hi = mid; } return lo; };
+  for (const h of H) {
+    for (let k = firstAtLeast(h.x0 + m); k < V.length && V[k].x <= h.x1 - m; k++) {
+      const v = V[k];
+      if (v.id === h.id) continue;
+      if (h.y >= v.y0 + m && h.y <= v.y1 - m) add(h.id, h.i, v.x, h.y);
+    }
+  }
+  // diagonal (straight) connectors: the flatter of the two segments hops
+  if (D.length) {
+    const all = [...H, ...V, ...D];
+    const slope = (s) => Math.abs((s.b[1] - s.a[1]) / ((s.b[0] - s.a[0]) || 1e-9));
+    for (const d of D) {
+      for (const o of all) {
+        if (o.id === d.id || o === d) continue;
+        if (D.includes(o) && D.indexOf(o) < D.indexOf(d)) continue; // each diagonal pair once
+        const r = [d.b[0] - d.a[0], d.b[1] - d.a[1]], q = [o.b[0] - o.a[0], o.b[1] - o.a[1]];
+        const den = r[0] * q[1] - r[1] * q[0];
+        if (Math.abs(den) < 1e-9) continue;
+        const t = ((o.a[0] - d.a[0]) * q[1] - (o.a[1] - d.a[1]) * q[0]) / den;
+        const u = ((o.a[0] - d.a[0]) * r[1] - (o.a[1] - d.a[1]) * r[0]) / den;
+        const ld = Math.hypot(r[0], r[1]), lo = Math.hypot(q[0], q[1]);
+        if (t * ld < m || (1 - t) * ld < m || u * lo < m || (1 - u) * lo < m) continue;
+        const x = d.a[0] + r[0] * t, y = d.a[1] + r[1] * t;
+        if (slope(d) <= slope(o)) add(d.id, d.i, x, y); else add(o.id, o.i, x, y);
+      }
+    }
+  }
+  return out;
 }
 
 // Sampled polyline for curves (used for hit tests and label placement)

@@ -173,7 +173,8 @@ req: Raise purchase request #P2P-01
 
 [Procurement]
 ok: Within budget? {decision} #P2P-02
-po: Issue purchase order #P2P-03 !R
+po: Issue purchase order #P2P-03 !C1
+  control: The buyer checks for an approved request before issuing the PO.
   risk: POs could be raised without an approved request.
 
 [Finance]
@@ -270,8 +271,11 @@ export function parseOutline(src) {
       }
       rest = rest.replace(/(^|\s)#([\w\-.]+)/g, (_, sp, t) => { n.tag = t; return sp; });
       rest = rest.replace(/(^|\s)!(\w+)/g, (_, sp, b) => {
-        const bk = doc.badgeKinds.find((x) => x.text.toLowerCase() === b.toLowerCase() || x.id === b.toLowerCase());
-        if (bk) n.badges.push(bk.id); else errors.push(`Line ${i + 1}: unknown badge "!${b}"`);
+        const kind = (t) => doc.badgeKinds.find((x) => x.text.toLowerCase() === t.toLowerCase() || x.id === t.toLowerCase());
+        let bk = kind(b), num = '';
+        const m2 = !bk && b.match(/^([A-Za-z]+)(\d+)$/); // !C1, !R2: badge with a number
+        if (m2 && (bk = kind(m2[1]))) num = m2[2];
+        if (bk) { if (!n.badges.includes(bk.id)) n.badges.push(bk.id); if (num) (n.badgeNums ||= {})[bk.id] = num; } else errors.push(`Line ${i + 1}: unknown badge "!${b}"`);
         return sp;
       });
       n.text = rest.trim() || n.text;

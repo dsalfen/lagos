@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { deflateRawSync } from 'node:zlib';
 import { writeFileSync } from 'node:fs';
-import { load, doc, box, toScreen, clickNode, noErrors, setup, N } from './helpers.js';
+import { load, doc, box, toScreen, clickNode, noErrors, setup, N, badgesOf } from './helpers.js';
 
 // --- a tiny .xlsx writer (deflated zip entries, shared + inline strings) ----------
 function zip(files) {
@@ -56,7 +56,7 @@ test('spreadsheet import: example data builds lanes, phases, branches and detail
   expect(by('CD-02').shape).toBe('decision');
   expect(by('CD-01').shape).toBe('manualInput');
   expect(d.nodes.find((n) => n.text === 'ERP').shape).toBe('database');
-  expect(by('CD-04').badges).toEqual(['risk']);
+  expect(await badgesOf(page, by('CD-04').id)).toEqual(['risk', 'control']);
   expect(by('CD-04').fields.risk).toContain('without approval');
   const e = (a, b) => d.edges.find((x) => x.from.node === a.id && x.to.node === b.id);
   expect(e(by('CD-02'), by('CD-03')).label).toBe('Yes');
@@ -106,7 +106,7 @@ test('spreadsheet import: reads an .xlsx file (via Open) and reports bad referen
   expect(d.title).toBe('steps');
   const p2 = d.nodes.find((n) => n.tag === 'P-2');
   expect(p2.shape).toBe('decision');
-  expect(p2.badges).toEqual(['risk']);
+  expect(await badgesOf(page, p2.id)).toEqual(['risk']);
   expect(d.fields.find((f) => f.label === 'Risk').highlight).toBe(true);
 });
 

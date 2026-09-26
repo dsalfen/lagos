@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { load, doc, noErrors, setup, N } from './helpers.js';
+import { load, doc, noErrors, setup, N, badgesOf } from './helpers.js';
 
 async function exportVia(page, cmd) {
   await page.click('[data-cmd="export-menu"]');
@@ -93,7 +93,8 @@ test('text outline import builds a laned diagram', async ({ page }) => {
   const ok = d.nodes.find((n) => n.text === 'Within budget?');
   expect(ok.shape).toBe('decision');
   const po = d.nodes.find((n) => n.tag === 'P2P-03');
-  expect(po.badges).toEqual(['risk']);
+  expect(await badgesOf(page, po.id)).toEqual(['risk', 'control']);
+  expect(po.badgeNums).toEqual({ control: '1' });
   expect(po.fields.risk).toContain('without an approved request');
   // every node sits inside its declared lane
   const laneOf = (n) => { let p = 0; for (const l of d.lanes.items) { const c = n.x + n.w / 2; if (c >= p && c < p + l.size) return l.title; p += l.size; } };

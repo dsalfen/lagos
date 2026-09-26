@@ -30,7 +30,15 @@ export function detailData(doc) {
   for (const n of doc.nodes) {
     const lane = laneAt(doc, ...center(n));
     const fields = doc.fields
-      .map((f) => ({ label: f.label, value: n.fields?.[f.key] ?? '', highlight: !!f.highlight }))
+      .map((f) => {
+        // a badge linked to this field, with a number on this shape, labels the field, e.g. "Control (C1)"
+        const kind = doc.badgeKinds.find((k) => k.field === f.key);
+        const num = kind ? String(n.badgeNums?.[kind.id] ?? '').trim() : '';
+        return {
+          label: f.label + (num ? ` (${kind.text || ''}${num})` : ''), value: n.fields?.[f.key] ?? '',
+          highlight: !!f.highlight, ...(f.highlight && f.color ? { color: safeColor(f.color, '') } : {}),
+        };
+      })
       .filter((f) => String(f.value).trim());
     const phase = phaseAt(doc, ...center(n));
     out[n.id] = {
@@ -84,7 +92,7 @@ function viewerScript() {
     if (n.phase) chips += '<span class="chip">' + esc(n.phase) + '</span>';
     if (n.shape) chips += '<span class="chip">' + esc(n.shape) + '</span>';
     var dl = n.fields.map(function (f) {
-      return '<div class="' + (f.highlight ? 'prp' : '') + '"><dt>' + esc(f.label) + '</dt><dd>' + fmt(f.value) + '</dd></div>';
+      return '<div class="' + (f.highlight ? 'prp' : '') + '"' + (f.highlight && f.color ? ' style="--hl:' + esc(f.color) + '"' : '') + '><dt>' + esc(f.label) + '</dt><dd>' + fmt(f.value) + '</dd></div>';
     }).join('');
     det.innerHTML = '<div class="id">' + esc(n.edge ? 'Connector' : (n.tag || cfg.noTag || '')) + '</div><h2>' + esc(n.text) + '</h2>' +
       '<div class="meta">' + chips + '</div>' + (dl ? '<dl>' + dl + '</dl>' : '<p class="empty">No details recorded for this step.</p>') +

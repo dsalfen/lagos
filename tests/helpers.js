@@ -52,3 +52,10 @@ export async function setup(page, nodes, edges = [], extra = {}) {
 }
 
 export const N = (id, x, y, extra = {}) => ({ id, shape: 'process', x, y, w: 160, h: 60, text: id.toUpperCase(), ...extra });
+
+// Badge kinds shown on a node (ticked ones plus those linked to a filled-in field).
+export const badgesOf = (page, id) => page.evaluate(async (i) => {
+  const { nodeBadges } = await import('/src/model.js');
+  const d = window.fc.getDoc();
+  return nodeBadges(d, d.nodes.find((n) => n.id === i)).map((b) => b.kind.id);
+}, id);

@@ -78,7 +78,7 @@ test('document settings: title, fields, connector types and badges', async ({ pa
   expect(d.title).toBe('My process');
   expect(d.fields.at(-1).label).toBe('New field');
   expect(d.edgeKinds).toHaveLength(3);
-  expect(d.badgeKinds).toHaveLength(2);
+  expect(d.badgeKinds).toHaveLength(3); // risk, control + the new one
   // title box in the toolbar also edits
   await page.fill('#doc-title', 'Renamed');
   expect((await doc(page)).title).toBe('Renamed');
@@ -148,7 +148,8 @@ test('preview mode shows the interactive viewer with details', async ({ page }) 
   await expect(frame.locator('#detail h2')).toHaveText('Within credit limit?');
   await frame.locator('[data-node="OTC-10"]').click();
   await expect(frame.locator('#detail .id')).toHaveText('OTC-10');
-  await expect(frame.locator('#detail .prp dd')).toContainText('wrong customer');
+  await expect(frame.locator('#detail .prp dd').last()).toContainText('wrong customer');
+  await expect(frame.locator('#detail .prp dt').first()).toHaveText('Control (C3)');
   await expect(frame.locator('.legend')).toContainText('Risk point');
   await expect(page.locator('#palette')).toBeHidden();
   await page.click('[data-cmd="mode-edit"]');

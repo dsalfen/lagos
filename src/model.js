@@ -25,6 +25,8 @@ export function defaultSettings() {
     detailHint: 'Select any shape to see its details.',
     highlightColor: 'var(--risk)',
     verticalLabels: 'horizontal',
+    lineJumps: 'arc',
+    jumpSize: 5,
   };
 }
 
@@ -35,8 +37,13 @@ export function defaultEdgeKinds() {
   ];
 }
 
+// A badge kind can be linked to a detail field: the badge then shows automatically on any shape
+// whose field has text (e.g. C when the Control field is filled in).
+export function controlBadgeKind(field) {
+  return { id: 'control', text: 'C', color: 'var(--control)', textColor: 'var(--control-ink)', name: 'Control point', ...(field ? { field } : {}) };
+}
 export function defaultBadgeKinds() {
-  return [{ id: 'risk', text: 'R', color: 'var(--risk)', name: 'Risk point' }];
+  return [{ id: 'risk', text: 'R', color: 'var(--risk)', name: 'Risk point', field: 'risk' }, controlBadgeKind('control')];
 }
 
 export function defaultFields() {
@@ -44,6 +51,7 @@ export function defaultFields() {
     { key: 'what', label: 'What happens' },
     { key: 'system', label: 'System / data' },
     { key: 'output', label: 'Output' },
+    { key: 'control', label: 'Control', highlight: true, color: 'var(--control)' },
     { key: 'risk', label: 'Risk point to probe', highlight: true },
   ];
 }
@@ -108,6 +116,8 @@ export function normalizeDoc(raw) {
   if (!Array.isArray(d.fields)) d.fields = defaultFields();
   if (!Array.isArray(d.edgeKinds) || !d.edgeKinds.length) d.edgeKinds = defaultEdgeKinds();
   if (!Array.isArray(d.badgeKinds)) d.badgeKinds = defaultBadgeKinds();
+  // charts saved before control points existed get the C badge (unlinked; link it in document settings)
+  if (!d.badgeKinds.some((b) => b.id === 'control')) d.badgeKinds.push(controlBadgeKind());
   d.shapeLabels = d.shapeLabels || {};
   d.nodes = (d.nodes || []).map((n) => {
     const def = shapeDef(n.shape);
@@ -210,4 +220,18 @@ export function growPhasesFor(doc, ids) {
     changed = true;
   }
   return changed;
+}
+
+// The badges a shape shows: ticked ones plus those whose linked field has text, each with its
+// optional number (C → C1).
+export function nodeBadges(doc, n) {
+  const out = [];
+  for (const kind of doc.badgeKinds) {
+    const manual = (n.badges || []).includes(kind.id);
+    const auto = !!(kind.field && String(n.fields?.[kind.field] ?? '').trim());
+    if (!manual && !auto) continue;
+    const num = String(n.badgeNums?.[kind.id] ?? '').trim();
+    out.push({ kind, label: (kind.text || '!') + num, auto: auto && !manual });
+  }
+  return out;
 }

@@ -1,8 +1,8 @@
 // Turns a document into SVG markup. Used by the editor canvas and by every export,
 // so what you see while editing is exactly what gets exported.
 import { SHAPES, SHAPE_ORDER, shapeDef, shapeTextBox } from './shapes.js';
-import { routeEdge, pathD, routePolyline, obstaclesFor, longestSegmentMid, pointAt, unionBox } from './geometry.js';
-import { laneRects, shapeLabel, phaseAxis, phaseStarts } from './model.js';
+import { routeEdge, pathD, routePolyline, obstaclesFor, longestSegmentMid, pointAt, unionBox, findJumps } from './geometry.js';
+import { laneRects, shapeLabel, phaseAxis, phaseStarts, nodeBadges } from './model.js';
 
 // All fonts are local: IBM Plex is embedded (src/fonts.css); the others use fonts installed on the computer.
 export const FONTS = {
@@ -47,7 +47,7 @@ export const THEME_LIGHT = {
   '--line': '#C6CEC9', '--lane': '#FFFFFF', '--lane-alt': '#EAEEEC', '--lane-head': '#DCE3DF',
   '--flow': '#2B5A84', '--feed': '#7E8A84', '--node': '#FFFFFF', '--node-stroke': '#33413B',
   '--dec': '#E9F0F7', '--term': '#E4E9E6', '--note': '#FFF6D6', '--group': 'rgba(43,90,132,0.05)',
-  '--risk': '#B8432B', '--risk-ink': '#FFFFFF', '--tag': '#2B5A84',
+  '--risk': '#B8432B', '--risk-ink': '#FFFFFF', '--tag': '#2B5A84', '--control': '#2E7D32', '--control-ink': '#FFFFFF',
   '--sel': '#2B5A84', '--sel-fill': '#DCE9F5', '--label-bg': '#F3F5F4',
 };
 export const THEME_DARK = {
@@ -55,7 +55,7 @@ export const THEME_DARK = {
   '--line': '#34403A', '--lane': '#161C19', '--lane-alt': '#1B2320', '--lane-head': '#232D29',
   '--flow': '#7FB0DD', '--feed': '#8C9892', '--node': '#1F2724', '--node-stroke': '#9AA8A1',
   '--dec': '#1D2A36', '--term': '#26302C', '--note': '#3A3522', '--group': 'rgba(127,176,221,0.06)',
-  '--risk': '#E0775C', '--risk-ink': '#121715', '--tag': '#7FB0DD',
+  '--risk': '#E0775C', '--risk-ink': '#121715', '--tag': '#7FB0DD', '--control': '#7CC47F', '--control-ink': '#121715',
   '--sel': '#7FB0DD', '--sel-fill': '#22364A', '--label-bg': '#161C19',
 };
 
@@ -234,11 +234,18 @@ function geometryKey(doc) {
   return k;
 }
 
+// Line hops are kept on the Map itself (routes.jumps), never on the cached route objects.
+function withJumps(doc, routes) {
+  routes.jumps = doc.settings.lineJumps === 'none' ? new Map() : findJumps(routes, jumpSize(doc));
+  return routes;
+}
+export const jumpSize = (doc) => Math.max(2, Math.min(12, Number(doc.settings.jumpSize) || 5));
+
 export function computeRoutes(doc, opts = {}) {
-  if (opts.prevRoutes && (opts.fastNodes || opts.fastEdges)) return computeRoutesFast(doc, opts);
-  const key = geometryKey(doc);
+  if (opts.prevRoutes && (opts.fastNodes || opts.fastEdges)) return withJumps(doc, computeRoutesFast(doc, opts));
+  const key = geometryKey(doc) + '|' + (doc.settings.lineJumps || 'arc') + jumpSize(doc);
   if (routeCache.key === key) return routeCache.routes;
-  const routes = computeRoutesFull(doc);
+  const routes = withJumps(doc, computeRoutesFull(doc));
   routeCache = { key, routes };
   return routes;
 }
@@ -374,9 +381,9 @@ export function labelGeometry(doc, e, route) {
   return { x, y, w, h, cx, cy, lines, lh, size, font, anchor };
 }
 
-export function renderEdge(doc, e, route, opts) {
+export function renderEdge(doc, e, route, opts, jumps = null) {
   const st = edgeStyle(doc, e);
-  const d = pathD(route, doc.settings.cornerRadius);
+  const d = pathD(route, doc.settings.cornerRadius, jumps, jumpSize(doc));
   const selected = opts.selEdges?.has(e.id);
   let inner = '';
   if (opts.editor || opts.interactive) inner += tag('path', { class: 'edge-hit', d, fill: 'none', stroke: 'transparent', 'stroke-width': 14 });
@@ -458,15 +465,20 @@ export function renderNode(doc, n, opts = {}) {
   }
   inner += tag('g', { class: 'label', 'pointer-events': 'none' }, text);
 
-  // badges
-  const badges = (n.badges || []).map((id) => doc.badgeKinds.find((b) => b.id === id)).filter(Boolean);
+  // badges (a circle, or a pill for numbered ones like C1), stepping left from the corner
+  const badges = nodeBadges(doc, n);
   if (badges.length) {
-    const [bx, by] = def.badge ? def.badge(n.w, n.h) : [n.w - 2, 2];
-    badges.forEach((b, i) => {
-      const x = bx - i * 19;
+    let [bx] = def.badge ? def.badge(n.w, n.h) : [n.w - 2, 2];
+    const by = (def.badge ? def.badge(n.w, n.h) : [0, 2])[1];
+    const bfont = `700 10px ${F.mono}`;
+    badges.forEach(({ kind: b, label }) => {
+      const w = Math.max(16, measure(label, bfont) + 8);
+      const cx = bx - (w - 16) / 2;
       inner += tag('g', { class: 'badge', 'data-badge': b.id },
-        tag('circle', { cx: round(x), cy: round(by), r: 8, fill: b.color || 'var(--risk)' }) +
-        tag('text', { x: round(x), y: round(by + 3.6), 'text-anchor': 'middle', 'font-size': 10, 'font-weight': 700, 'font-family': F.mono, fill: b.textColor || 'var(--risk-ink)' }, esc(b.text || '!')));
+        (w === 16 ? tag('circle', { cx: round(cx), cy: round(by), r: 8, fill: b.color || 'var(--risk)' })
+          : tag('rect', { x: round(cx - w / 2), y: round(by - 8), width: round(w), height: 16, rx: 8, fill: b.color || 'var(--risk)' })) +
+        tag('text', { x: round(cx), y: round(by + 3.6), 'text-anchor': 'middle', 'font-size': 10, 'font-weight': 700, 'font-family': F.mono, fill: b.textColor || 'var(--risk-ink)' }, esc(label)));
+      bx -= w + 3;
     });
   }
 
@@ -610,7 +622,7 @@ export function renderDiagram(doc, opts = {}) {
   const alongEnd = hasLanes ? extent : (cb ? (horiz ? cb.x + cb.w : cb.y + cb.h) + 40 : 0);
   body += tag('g', { class: 'phases' }, renderPhases(doc, crossLen, alongEnd));
   body += tag('g', { class: 'containers' }, containers.map((n) => renderNode(doc, n, opts)).join(''));
-  body += tag('g', { class: 'edges' }, doc.edges.map((e) => renderEdge(doc, e, routes.get(e.id), opts)).join(''));
+  body += tag('g', { class: 'edges' }, doc.edges.map((e) => renderEdge(doc, e, routes.get(e.id), opts, routes.jumps?.get(e.id))).join(''));
   body += tag('g', { class: 'edge-labels' }, doc.edges.map((e) => renderLabel(doc, e, routes.get(e.id), opts)).join(''));
   body += tag('g', { class: 'nodes' }, others.map((n) => renderNode(doc, n, opts)).join(''));
 
@@ -687,7 +699,7 @@ export function legendItems(doc) {
   if (dashed && doc.dashedNodeLabel && !hidden.has('dashed')) items.push({ type: 'dashed', key: 'dashed', label: doc.dashedNodeLabel });
   const kinds = new Set(doc.edges.map((e) => e.kind));
   for (const k of doc.edgeKinds) if (kinds.has(k.id) && !hidden.has('edge:' + k.id)) items.push({ type: 'edge', key: k.id, label: k.name, kind: k });
-  const badges = new Set(doc.nodes.flatMap((n) => n.badges || []));
+  const badges = new Set(doc.nodes.flatMap((n) => nodeBadges(doc, n).map((b) => b.kind.id)));
   for (const b of doc.badgeKinds) if (badges.has(b.id) && !hidden.has('badge:' + b.id)) items.push({ type: 'badge', key: b.id, label: b.name, badge: b });
   // optional explicit order, e.g. ["shape:process", "shape:decision", ...]
   if (Array.isArray(doc.legendOrder) && doc.legendOrder.length) {
