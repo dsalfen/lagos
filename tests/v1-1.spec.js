@@ -91,23 +91,48 @@ test('risk badges still work, with numbers too', async ({ page }) => {
   await expect(page.locator('#canvas [data-node="b"] [data-badge="risk"] text')).toHaveText('R');
 });
 
-test('older charts: open unchanged, gain hops, and can link C to one of their fields', async ({ page }) => {
+const OLD = (fields, nodeFields) => ({
+  title: 'Old', fields, badgeKinds: [{ id: 'risk', text: 'R', color: 'var(--risk)', name: 'Risk point' }],
+  nodes: [{ id: 'a', shape: 'process', x: 0, y: 0, w: 160, h: 60, text: 'A', badges: ['risk'], fields: nodeFields }], edges: [],
+});
+
+test('older charts gain hops and an empty Control field; a ticked C gets a description and ID', async ({ page }) => {
   await load(page, 'blank');
-  await page.evaluate(() => window.fc.setDoc({
-    title: 'Old', fields: [{ key: 'prp', label: 'Risk point to probe', highlight: true }, { key: 'kc', label: 'Key control' }],
-    badgeKinds: [{ id: 'risk', text: 'R', color: 'var(--risk)', name: 'Risk point' }],
-    nodes: [{ id: 'a', shape: 'process', x: 0, y: 0, w: 160, h: 60, text: 'A', badges: ['risk'], fields: { prp: 'p', kc: 'k' } }], edges: [],
-  }));
+  await page.evaluate((d) => window.fc.setDoc(d), OLD([{ key: 'what', label: 'What happens' }, { key: 'prp', label: 'Risk point to probe', highlight: true }], { prp: 'p' }));
   const d = await doc(page);
   expect(d.settings.lineJumps).toBe('arc');
   expect(d.badgeKinds.map((b) => b.id)).toEqual(['risk', 'control']);
-  expect(d.badgeKinds[1].field).toBeUndefined();
+  expect(d.fields.map((f) => f.key)).toEqual(['what', 'control', 'prp']);
+  expect(d.badgeKinds[1].field).toBe('control');
+  // nothing changes on the chart until C is used
   await expect(page.locator('#canvas [data-badge="control"]')).toHaveCount(0);
   expect(await page.evaluate(() => window.fc.exportSVG())).not.toContain('Control point');
-  // link it from the document settings
-  await page.evaluate(() => window.fc.clearSelection());
-  await page.selectOption('[data-badge-field="control"]', 'kc');
+  // tick C on a shape: there is a Control field for its description, and an ID box
+  await page.evaluate(() => window.fc.select({ nodes: ['a'] }));
+  await page.click('[data-badge-toggle="control"]');
+  await expect(page.locator('#canvas [data-node="a"] [data-badge="control"] text')).toHaveText('C');
+  await page.fill('[data-field="control"]', 'Second signatory approves payments');
+  await page.fill('[data-badge-num="control"]', 'KC-04');
+  await expect(page.locator('#canvas [data-node="a"] [data-badge="control"] text')).toHaveText('KC-04');
+  await page.click('[data-cmd="mode-preview"]');
+  const frame = page.frameLocator('#preview');
+  await frame.locator('[data-node="a"]').click();
+  await expect(frame.locator('#detail .prp dt').first()).toHaveText('Control (KC-04)');
+  await noErrors(page);
+});
+
+test('older charts with their own control field link C to it; "Only when ticked" sticks', async ({ page }) => {
+  await load(page, 'blank');
+  await page.evaluate((d) => window.fc.setDoc(d), OLD([{ key: 'prp', label: 'Risk point to probe', highlight: true }, { key: 'kc', label: 'Key control' }], { prp: 'p', kc: 'k' }));
+  expect((await doc(page)).fields.map((f) => f.key)).toEqual(['prp', 'kc']);
   await expect(page.locator('#canvas [data-badge="control"]')).toHaveCount(1);
+  await page.evaluate(() => window.fc.clearSelection());
+  await page.selectOption('[data-badge-field="control"]', '');
+  await expect(page.locator('#canvas [data-badge="control"]')).toHaveCount(0);
+  // survives save and re-open
+  await page.evaluate(() => window.fc.setDoc(JSON.parse(JSON.stringify(window.fc.getDoc()))));
+  await expect(page.locator('#canvas [data-badge="control"]')).toHaveCount(0);
+  expect((await doc(page)).badgeKinds[1].field).toBe('');
   await noErrors(page);
 });
 

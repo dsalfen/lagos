@@ -165,7 +165,7 @@ function badgesSection(nodes) {
         if (String(v).trim()) n.badgeNums[b.id] = String(v).trim(); else delete n.badgeNums[b.id];
         if (!Object.keys(n.badgeNums).length) delete n.badgeNums;
       }
-    }, { class: 'fixed', style: 'width:52px', maxlength: 6, placeholder: 'No.', title: `Number shown after ${b.text}, e.g. ${b.text}1`, 'aria-label': `${b.name} number`, 'data-badge-num': b.id });
+    }, { class: 'fixed', style: 'width:84px', maxlength: 16, placeholder: 'No. / ID', title: `A number (1 shows as ${b.text}1) or an ID such as K${b.text}-04, shown on the badge and in the details panel`, 'aria-label': `${b.name} number or ID`, 'data-badge-num': b.id });
     const note = h('p', { class: 'hint-text', style: 'margin:0 0 4px 22px' }, `automatic: ${fieldLabel(b.field)} has text`);
     const update = () => {
       // shown automatically because its linked field has text on every selected shape
@@ -580,7 +580,7 @@ function docInspector() {
     listEditor(doc.badgeKinds, (b) => h('div', {},
       h('div', { class: 'row' }, text(b.text, (v) => { b.text = v; }, { class: 'fixed', style: 'width:44px', maxlength: 3, 'aria-label': 'Badge text' }), text(b.name, (v) => { b.name = v; }, { 'aria-label': 'Badge meaning' })),
       field('Auto', selectEl([['', 'Only when ticked'], ...doc.fields.map((f) => [f.key, `When “${f.label}” has text`])], b.field || '',
-        (v) => { if (v) b.field = v; else delete b.field; }, { 'aria-label': 'Show automatically', title: 'Show this badge automatically on shapes where this detail field has text', 'data-badge-field': b.id })),
+        (v) => { b.field = v; }, { 'aria-label': 'Show automatically', title: 'Show this badge automatically on shapes where this detail field has text', 'data-badge-field': b.id })),
       colorField(b.color, ['var(--risk)', 'var(--control)', 'var(--flow)', '#2E7D32', '#B7791F', '#6A1B9A', '#0B7285', '#C2185B'], (v) => { b.color = v || 'var(--risk)'; }, { allowDefault: false, name: 'badge-' + b.id })),
     () => { doc.badgeKinds.push({ id: uid('b'), text: 'B', name: 'New badge', color: '#B7791F' }); }, '+ Add badge'),
   ));

@@ -202,7 +202,7 @@ export function buildFromRows(rows, roles, { headerRow = true, orientation = 've
   for (const kind of doc.badgeKinds) {
     const test = kind.id === 'control' ? (f) => f.color === 'var(--control)' : kind.id === 'risk' ? (f) => f.highlight && !f.color : null;
     const f = badges && test ? doc.fields.find(test) : null;
-    if (f) kind.field = f.key; else delete kind.field;
+    if (f) kind.field = f.key; else if (badges) delete kind.field; else kind.field = '';
   }
   const lanes = new Map(), phases = new Map();
   const get = (r, role) => { const i = idx(role); return i >= 0 ? String(r[i] ?? '').trim() : ''; };

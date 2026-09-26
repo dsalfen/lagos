@@ -116,8 +116,20 @@ export function normalizeDoc(raw) {
   if (!Array.isArray(d.fields)) d.fields = defaultFields();
   if (!Array.isArray(d.edgeKinds) || !d.edgeKinds.length) d.edgeKinds = defaultEdgeKinds();
   if (!Array.isArray(d.badgeKinds)) d.badgeKinds = defaultBadgeKinds();
-  // charts saved before control points existed get the C badge (unlinked; link it in document settings)
+  // charts saved before control points existed get the C badge, linked to a Control field (their
+  // own if they have one, else a new empty one) so a ticked C has somewhere for its description.
+  // field: '' means "only when ticked", chosen in the document settings.
   if (!d.badgeKinds.some((b) => b.id === 'control')) d.badgeKinds.push(controlBadgeKind());
+  const ck = d.badgeKinds.find((b) => b.id === 'control');
+  if (ck.field === undefined) {
+    let f = d.fields.find((x) => x.key === 'control') || d.fields.find((x) => /\bcontrols?\b/i.test(x.label || ''));
+    if (!f) {
+      f = { key: 'control', label: 'Control', highlight: true, color: 'var(--control)' };
+      const at = d.fields.findIndex((x) => x.highlight);
+      d.fields.splice(at < 0 ? d.fields.length : at, 0, f);
+    }
+    ck.field = f.key;
+  }
   d.shapeLabels = d.shapeLabels || {};
   d.nodes = (d.nodes || []).map((n) => {
     const def = shapeDef(n.shape);
@@ -230,8 +242,13 @@ export function nodeBadges(doc, n) {
     const manual = (n.badges || []).includes(kind.id);
     const auto = !!(kind.field && String(n.fields?.[kind.field] ?? '').trim());
     if (!manual && !auto) continue;
-    const num = String(n.badgeNums?.[kind.id] ?? '').trim();
-    out.push({ kind, label: (kind.text || '!') + num, auto: auto && !manual });
+    out.push({ kind, label: badgeLabel(kind, n.badgeNums?.[kind.id]), auto: auto && !manual });
   }
   return out;
+}
+
+// A number is added to the badge letter (1 → C1); an ID starting with a letter replaces it (KC-04).
+export function badgeLabel(kind, num) {
+  const v = String(num ?? '').trim();
+  return /^[A-Za-z]/.test(v) ? v : (kind.text || '!') + v;
 }

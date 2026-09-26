@@ -1,5 +1,5 @@
 import { renderSVG, themeCSS, legendHTML, fontFor, esc } from './render.js';
-import { laneAt, phaseAt, shapeLabel, normalizeDoc } from './model.js';
+import { laneAt, phaseAt, shapeLabel, normalizeDoc, badgeLabel } from './model.js';
 import { center } from './geometry.js';
 
 const safeJSON = (o) => JSON.stringify(o).replace(/</g, '\\u003c');
@@ -35,7 +35,7 @@ export function detailData(doc) {
         const kind = doc.badgeKinds.find((k) => k.field === f.key);
         const num = kind ? String(n.badgeNums?.[kind.id] ?? '').trim() : '';
         return {
-          label: f.label + (num ? ` (${kind.text || ''}${num})` : ''), value: n.fields?.[f.key] ?? '',
+          label: f.label + (num ? ` (${badgeLabel(kind, num)})` : ''), value: n.fields?.[f.key] ?? '',
           highlight: !!f.highlight, ...(f.highlight && f.color ? { color: safeColor(f.color, '') } : {}),
         };
       })
