@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test Cycle Flowchart</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#F3F5F4; --panel:#FFFFFF; --ink:#18201D; --muted:#58645E; --faint:#8A958F;
+  --line:#C6CEC9; --lane:#FFFFFF; --lane-alt:#EAEEEC; --lane-head:#DCE3DF;
+  --flow:#2B5A84; --feed:#7E8A84; --node:#FFFFFF; --node-stroke:#33413B;
+  --dec:#E9F0F7; --term:#E4E9E6; --risk:#B8432B; --risk-ink:#FFFFFF;
+  --sel:#2B5A84; --sel-fill:#DCE9F5; --label-bg:#F3F5F4;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --cond:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#121715; --panel:#1A211E; --ink:#E4EAE7; --muted:#A3AFA9; --faint:#76827C;
+    --line:#34403A; --lane:#161C19; --lane-alt:#1B2320; --lane-head:#232D29;
+    --flow:#7FB0DD; --feed:#8C9892; --node:#1F2724; --node-stroke:#9AA8A1;
+    --dec:#1D2A36; --term:#26302C; --risk:#E0775C; --risk-ink:#121715;
+    --sel:#7FB0DD; --sel-fill:#22364A; --label-bg:#161C19;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#121715; --panel:#1A211E; --ink:#E4EAE7; --muted:#A3AFA9; --faint:#76827C;
+  --line:#34403A; --lane:#161C19; --lane-alt:#1B2320; --lane-head:#232D29;
+  --flow:#7FB0DD; --feed:#8C9892; --node:#1F2724; --node-stroke:#9AA8A1;
+  --dec:#1D2A36; --term:#26302C; --risk:#E0775C; --risk-ink:#121715;
+  --sel:#7FB0DD; --sel-fill:#22364A; --label-bg:#161C19;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5}
+.wrap{max-width:1400px;margin:0 auto;padding-inline:16px;padding-block:24px 40px}
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;margin-bottom:16px}
+h1{font-family:var(--cond);font-weight:600;font-size:26px;letter-spacing:-0.01em;margin:0;text-wrap:balance}
+.sub{color:var(--muted);margin:2px 0 0;font-size:13px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);align-items:center}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend svg{flex:none}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}}
+.chart{background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow-x:auto}
+.chart svg{display:block}
+.detail{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px 18px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px)}
+@media (max-width:900px){.detail{position:static}}
+.detail .id{font-family:var(--mono);font-size:12px;color:var(--flow);font-weight:600;letter-spacing:.02em}
+.detail h2{font-family:var(--cond);font-size:20px;font-weight:600;margin:2px 0 10px;text-wrap:balance}
+.meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.chip{font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:2px 8px;border-radius:99px;background:var(--lane-alt);color:var(--muted);font-weight:500}
+.detail dl{margin:0;display:grid;gap:10px}
+.detail dt{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);font-weight:600}
+.detail dd{margin:2px 0 0}
+.prp{border-left:3px solid var(--risk);padding-left:10px}
+.prp dt{color:var(--risk)}
+.hint{margin-top:14px;font-size:12px;color:var(--faint)}
+.node{cursor:pointer}
+.node:focus{outline:none}
+.node:focus-visible .shape{stroke:var(--sel);stroke-width:3}
+.node.sel .shape{fill:var(--sel-fill);stroke:var(--sel);stroke-width:2.5}
+.node:hover .shape{stroke:var(--sel)}
+@media (prefers-reduced-motion:no-preference){.node .shape{transition:fill .15s,stroke .15s}}
+.notes{margin-top:16px;color:var(--muted);font-size:13px;max-width:75ch}
+.notes p{margin:0 0 6px}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Test Cycle Flowchart</h1>
+      <p class="sub">Synthetic fixture for the converter test</p>
+    </div>
+    <div class="legend" aria-label="Legend">
+      <span><svg width="26" height="16"><rect x="1" y="2" width="24" height="12" rx="2" fill="var(--node)" stroke="var(--node-stroke)"/></svg>Process</span>
+      <span><svg width="26" height="16"><polygon points="13,1 25,8 13,15 1,8" fill="var(--dec)" stroke="var(--node-stroke)"/></svg>Decision</span>
+      <span><svg width="26" height="16"><path d="M1 2H25V12Q19 9 13 12T1 12Z" fill="var(--node)" stroke="var(--node-stroke)"/></svg>Report</span>
+      <span><svg width="26" height="16"><path d="M5 2H25L21 14H1Z" fill="var(--node)" stroke="var(--node-stroke)"/></svg>Data transfer</span>
+      <span><svg width="26" height="16"><path d="M1 6L25 2V14H1Z" fill="var(--node)" stroke="var(--node-stroke)"/></svg>Manual input</span>
+      <span><svg width="26" height="16"><rect x="1" y="3" width="24" height="10" rx="5" fill="var(--term)" stroke="var(--node-stroke)"/></svg>Start / end</span>
+      <span><svg width="28" height="10"><line x1="1" y1="5" x2="27" y2="5" stroke="var(--flow)" stroke-width="1.6"/></svg>Flow</span>
+      <span><svg width="28" height="10"><line x1="1" y1="5" x2="27" y2="5" stroke="var(--feed)" stroke-width="1.6" stroke-dasharray="4 3"/></svg>Information feed</span>
+      <span><svg width="16" height="16"><circle cx="8" cy="8" r="7" fill="var(--risk)"/><text x="8" y="11.5" text-anchor="middle" font-size="10" font-weight="700" fill="var(--risk-ink)" font-family="IBM Plex Mono,monospace">R</text></svg>Risk point</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="chart" id="chart" role="region" aria-label="Swimlane flowchart" tabindex="0"></div>
+    <aside class="detail" id="detail" aria-live="polite"></aside>
+  </div>
+
+  <div class="notes">
+    <p>Invented content.</p>
+  </div>
+</div>
+
+<script>
+(function(){
+const LANES=["External","Team","Finance"];
+const LW=200, TOP=56, ROW=92, BW=164, BH=56, DH=78, W=640, NROWS=6;
+const cx=c=>c*LW+LW/2, cy=r=>TOP+r*ROW+ROW/2, bnd=r=>TOP+r*ROW;
+
+const N=[
+ {id:"TST-01",t:"Receive request",c:1,r:0,s:"proc",sp:"A1 · Intake",lane:"Team",what:"A request arrives.",sys:"Email",out:"Request"},
+ {id:"TST-02",t:"Valid?",c:1,r:1,s:"dec",sp:"A1 · Intake",lane:"Team",what:"Check the request.",sys:"Form",out:"Decision",prp:"Invalid requests could be processed."},
+ {id:"TST-03",t:"Record in ledger",c:2,r:2,s:"xfer",sp:"A2 · Record",lane:"Finance",what:"Post it.",sys:"ERP",out:"Entry"},
+ {id:"TST-04",t:"Pay by hand",c:2,r:3,s:"man",sp:"A2 · Record",lane:"Finance",what:"Manual payment.",sys:"Bank",out:"Payment"},
+ {id:"EXT",t:"Supplier records",c:0,r:3,s:"data",sp:"A2 · Record",lane:"External",what:"Held by supplier.",sys:"Portal",out:"—"},
+ {id:"END",t:"Done",c:2,r:4,s:"term",sp:"A2 · Record",lane:"Finance",what:"Finished.",sys:"—",out:"—"}
+];
+const byId={}; N.forEach(n=>{n.x=cx(n.c);n.y=cy(n.r);n.h=n.s==="dec"?DH:(n.s==="term"?40:BH);byId[n.id]=n;});
+const P=(id,side,dy=0)=>{const n=byId[id];let hw=BW/2;const hh=n.h/2;if(n.s==="term")hw-=14;
+  if(side==="b")return[n.x,n.y+hh]; if(side==="t")return[n.x,n.y-hh];
+  const inset=n.s==="xfer"?6:0; if(side==="l")return[n.x-hw+inset,n.y+dy]; return[n.x+hw-inset,n.y+dy];};
+const E=[]; const e=(pts,o={})=>E.push(Object.assign({pts},o));
+const v=(a,b,o)=>e([P(a,"b"),P(b,"t")],o);
+const bh=(a,b,o)=>{const A=P(a,"b"),B=P(b,"t"),y=bnd(byId[b].r)+2;e([A,[A[0],y],[B[0],y],B],o);};
+const stub=(id,text,dir="r")=>{const p=P(id,dir);e([p,[p[0]+(dir==="r"?22:-22),p[1]]],{stub:text,dir});};
+
+v("TST-01","TST-02");
+bh("TST-02","TST-03",{label:"Yes"}); stub("TST-02","No: reject","l");
+v("TST-03","TST-04");
+e([P("TST-04","l"),P("EXT","r",10)],{dash:1,label:"remittance",lt:.3});
+v("TST-04","END");
+
+const H=TOP+NROWS*ROW+16;
+const NS="http://www.w3.org/2000/svg";
+const el=(t,a,p)=>{const x=document.createElementNS(NS,t);for(const k in a)x.setAttribute(k,a[k]);if(p)p.appendChild(x);return x;};
+const svg=el("svg",{viewBox:`0 0 ${W} ${H}`,width:W,height:H,role:"img","aria-label":"Test flowchart"});
+const defs=el("defs",{},svg);
+const mk=(id,col)=>{const m=el("marker",{id,viewBox:"0 0 10 10",refX:"9",refY:"5",markerWidth:"7",markerHeight:"7",orient:"auto-start-reverse"},defs);el("path",{d:"M0 0L10 5L0 10z",fill:col},m);};
+mk("af","var(--flow)");mk("ad","var(--feed)");
+LANES.forEach((L,i)=>{
+  const w=i===LANES.length-1?W-i*LW:LW;
+  el("rect",{x:i*LW,y:0,width:w,height:H,fill:i%2?"var(--lane-alt)":"var(--lane)"},svg);
+  el("rect",{x:i*LW,y:0,width:w,height:40,fill:"var(--lane-head)"},svg);
+  const t=el("text",{x:cx(i),y:25,"text-anchor":"middle","font-family":"IBM Plex Sans Condensed, Arial Narrow, sans-serif","font-size":"12","font-weight":"600","letter-spacing":"0.07em",fill:"var(--muted)"},svg);t.textContent=L.toUpperCase();
+  if(i>0)el("line",{x1:i*LW,y1:0,x2:i*LW,y2:H,stroke:"var(--line)"},svg);
+});
+const sub=el("text",{x:cx(0),y:52,"text-anchor":"middle","font-size":"10",fill:"var(--faint)","font-family":"IBM Plex Sans, sans-serif"},svg);sub.textContent="Suppliers";
+const eg=el("g",{fill:"none"},svg), lg=el("g",{},svg);
+E.forEach(ed=>{
+  const col=ed.dash?"var(--feed)":"var(--flow)";
+  el("path",{d:"M"+ed.pts.map(p=>p.join(" ")).join("L"),stroke:col,"stroke-width":1.6,"stroke-dasharray":ed.dash?"5 4":"none","marker-end":`url(#${ed.dash?"ad":"af"})`,"stroke-linejoin":"round"},eg);
+  if(ed.stub){const[x,y]=ed.pts[1];const t=el("text",{x:ed.dir==="l"?x-5:x+5,y:y+4,"text-anchor":ed.dir==="l"?"end":"start","font-size":"10.5",fill:"var(--muted)","font-family":"IBM Plex Sans Condensed, sans-serif"},lg);t.textContent=ed.stub;return;}
+  if(!ed.label)return;
+  let best=0,bi=0;for(let i=0;i<ed.pts.length-1;i++){const a=ed.pts[i],b=ed.pts[i+1];const L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(L>best){best=L;bi=i;}}
+  const a=ed.pts[bi],b=ed.pts[bi+1],f=ed.lt??.5,mx=a[0]+(b[0]-a[0])*f,my=a[1]+(b[1]-a[1])*f,vert=Math.abs(b[0]-a[0])<1;
+  const g=el("g",{},lg);
+  const t=el("text",{"font-size":"10.5","font-family":"IBM Plex Sans Condensed, sans-serif",fill:ed.dash?"var(--muted)":"var(--flow)","font-weight":"500"},g);t.textContent=ed.label;
+  if(vert&&best<70){t.setAttribute("x",mx+6);t.setAttribute("y",my+4);}
+  else if(vert){t.setAttribute("x",0);t.setAttribute("y",0);t.setAttribute("text-anchor","middle");g.setAttribute("transform",`translate(${mx} ${my}) rotate(-90) translate(0 3.5)`);}
+  else{t.setAttribute("x",mx);t.setAttribute("y",my-5);t.setAttribute("text-anchor","middle");}
+  requestAnimationFrame(()=>{try{const bb=t.getBBox();const r=el("rect",{x:bb.x-3,y:bb.y-1,width:bb.width+6,height:bb.height+2,rx:2,fill:"var(--label-bg)"});g.insertBefore(r,t);}catch(_){}});
+});
+function wrap(s,max){const w=s.split(" ");const out=[];let cur="";w.forEach(x=>{if((cur+" "+x).trim().length>max){if(cur)out.push(cur);cur=x;}else cur=(cur+" "+x).trim();});if(cur)out.push(cur);return out;}
+const ng=el("g",{},svg), nodes={};
+N.forEach(n=>{
+  const isStep=n.id.startsWith("TST");
+  const g=el("g",{class:"node",tabindex:"0",role:"button","aria-label":(isStep?n.id+" ":"")+n.t},ng);
+  const x=n.x,y=n.y,hw=BW/2,hh=n.h/2;
+  const base={class:"shape",fill:"var(--node)",stroke:"var(--node-stroke)","stroke-width":1.4};
+  let s;
+  if(n.s==="dec")s=el("polygon",Object.assign({},base,{points:`${x},${y-hh} ${x+hw},${y} ${x},${y+hh} ${x-hw},${y}`,fill:"var(--dec)"}),g);
+  else if(n.s==="term")s=el("rect",Object.assign({},base,{x:x-hw+14,y:y-20,width:BW-28,height:40,rx:20,fill:"var(--term)"}),g);
+  else if(n.s==="doc")s=el("path",Object.assign({},base,{d:`M${x-hw} ${y-hh}H${x+hw}V${y+hh-8}Q${x+hw/2} ${y+hh-18} ${x} ${y+hh-8}T${x-hw} ${y+hh-8}Z`}),g);
+  else if(n.s==="xfer")s=el("path",Object.assign({},base,{d:`M${x-hw+12} ${y-hh}H${x+hw}L${x+hw-12} ${y+hh}H${x-hw}Z`}),g);
+  else if(n.s==="man")s=el("path",Object.assign({},base,{d:`M${x-hw} ${y-hh+12}L${x+hw} ${y-hh}V${y+hh}H${x-hw}Z`}),g);
+  else if(n.s==="data"){const ry=7;s=el("path",Object.assign({},base,{d:`M${x-hw} ${y-hh+ry}A${hw} ${ry} 0 0 1 ${x+hw} ${y-hh+ry}V${y+hh-ry}A${hw} ${ry} 0 0 1 ${x-hw} ${y+hh-ry}Z`}),g);el("path",{d:`M${x-hw} ${y-hh+ry}A${hw} ${ry} 0 0 0 ${x+hw} ${y-hh+ry}`,fill:"none",stroke:"var(--node-stroke)","stroke-width":1.2},g);}
+  else{s=el("rect",Object.assign({},base,{x:x-hw,y:y-hh,width:BW,height:BH,rx:3}),g);if(n.s==="tbc")s.setAttribute("stroke-dasharray","5 4");}
+  const max=n.s==="dec"?15:(n.s==="term"?20:23);
+  const lines=wrap(n.t,max),lh=13.5,total=(isStep?1:0)+lines.length;
+  let ty=y-(total-1)*lh/2+4-(n.s==="doc"?4:0)+(n.s==="man"?3:0)+(n.s==="data"?5:0);
+  if(isStep){const t=el("text",{x,y:ty,"text-anchor":"middle","font-family":"IBM Plex Mono, monospace","font-size":"10.5","font-weight":"600",fill:"var(--flow)","letter-spacing":"0.03em"},g);t.textContent=n.id;ty+=lh;}
+  lines.forEach(L=>{const t=el("text",{x,y:ty,"text-anchor":"middle","font-family":"IBM Plex Sans Condensed, Arial Narrow, sans-serif","font-size":n.s==="dec"?"11.5":"12.5","font-weight":"500",fill:"var(--ink)"},g);t.textContent=L;ty+=lh;});
+  if(n.prp&&isStep){const bx=n.s==="dec"?x+24:x+hw-2,by=n.s==="dec"?y-hh+14:y-hh+2;el("circle",{cx:bx,cy:by,r:8,fill:"var(--risk)"},g);const t=el("text",{x:bx,y:by+3.6,"text-anchor":"middle","font-size":"10","font-weight":"700","font-family":"IBM Plex Mono, monospace",fill:"var(--risk-ink)"},g);t.textContent="R";}
+  g.addEventListener("click",()=>select(n.id));
+  g.addEventListener("keydown",ev=>{if(ev.key==="Enter"||ev.key===" "){ev.preventDefault();select(n.id);}});
+  nodes[n.id]=g;
+});
+document.getElementById("chart").appendChild(svg);
+const det=document.getElementById("detail");
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const shapeName={proc:"Process",dec:"Decision",doc:"Report",xfer:"Data transfer",man:"Manual input",data:"Data store",term:"Start / end",tbc:"Process (TBC)"};
+function select(id){const n=byId[id];Object.values(nodes).forEach(g=>g.classList.remove("sel"));nodes[id].classList.add("sel");
+  det.innerHTML=`<div class="id">${n.id.startsWith("TST")?esc(n.id):"Connector"}</div><h2>${esc(n.t)}</h2>
+  <div class="meta"><span class="chip">${esc(n.lane)}</span><span class="chip">${shapeName[n.s]}</span></div>
+  <dl><div><dt>Sub-process</dt><dd>${esc(n.sp)}</dd></div><div><dt>What happens</dt><dd>${esc(n.what)}</dd></div>
+  <div><dt>System / data</dt><dd>${esc(n.sys)}</dd></div><div><dt>Output</dt><dd>${esc(n.out)}</dd></div>
+  ${n.prp?`<div class="prp"><dt>Risk point to probe</dt><dd>${esc(n.prp)}</dd></div>`:""}</dl>
+  <p class="hint">Select any shape to see its details.</p>`;}
+select("TST-02");
+})();
+</script>
+
+</html>

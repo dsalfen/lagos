@@ -1,0 +1,20 @@
+{
+  "name": "lagos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser-based flowchart and swimlane editor that runs from a single offline HTML file",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "build": "node scripts/build.js",
+    "test": "playwright test",
+    "fonts": "node scripts/fonts.js"
+  },
+  "devDependencies": {
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
+    "@fontsource/ibm-plex-sans-condensed": "^5.3.0",
+    "@playwright/test": "1.56.1",
+    "esbuild": "0.25.10"
+  }
+}

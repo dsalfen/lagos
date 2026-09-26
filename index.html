@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flowchart Editor</title>
+<!-- No network access: this policy makes the browser refuse any request to other servers. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; frame-src 'self' data: blob:; child-src 'self' data: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<link rel="stylesheet" href="src/fonts.css" id="font-css">
+<link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <button class="narrow-only" data-cmd="toggle-palette" aria-label="Show shapes" title="Shapes">＋ Shapes</button>
+    <button class="narrow-only" data-cmd="toggle-inspector" aria-label="Show properties" title="Properties">☰ Props</button>
+    <div class="brand" title="Flowchart editor"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect x="1" y="1" width="8" height="6" rx="1.5"/><path d="M5 7v4h10v2"/><path d="M15 13l-4 4 4 4 4-4z" transform="translate(0 -3)"/></svg></div>
+    <input id="doc-title" aria-label="Document title" spellcheck="false">
+    <div class="tb-group">
+      <button data-cmd="new" title="New from template (Ctrl+Alt+N)">New</button>
+      <button data-cmd="open" title="Open .json, exported .html, or a spreadsheet (.xlsx, .csv) (Ctrl+O)">Open</button>
+      <button data-cmd="save" title="Download as .json (Ctrl+S)">Save</button>
+      <div class="menu-wrap">
+        <button data-cmd="export-menu" aria-haspopup="true" aria-expanded="false">Import / Export ▾</button>
+        <div class="menu" id="export-menu" role="menu" hidden>
+          <button role="menuitem" data-cmd="export-html" title="One file with the fonts built in; opens anywhere, no internet needed">Interactive HTML page</button>
+          <button role="menuitem" data-cmd="export-html-small" title="About 210 KB smaller; uses the fonts installed on the reader's computer">Interactive HTML page, smaller (system fonts)</button>
+          <button role="menuitem" data-cmd="export-svg">SVG image</button>
+          <button role="menuitem" data-cmd="export-png">PNG image (2×)</button>
+          <button role="menuitem" data-cmd="export-json">JSON document</button>
+          <hr>
+          <button role="menuitem" data-cmd="copy-svg">Copy SVG to clipboard</button>
+          <button role="menuitem" data-cmd="import-sheet">Import spreadsheet (Excel, CSV)…</button>
+          <button role="menuitem" data-cmd="import-text">Import from text outline…</button>
+        </div>
+      </div>
+    </div>
+    <div class="tb-group">
+      <button data-cmd="undo" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+      <button data-cmd="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
+      <button data-cmd="painter" id="painter-btn" title="Format painter: copy the selected item's formatting, then click shapes or connectors to apply it. Double-click to keep it on (Esc to stop)." aria-label="Format painter" aria-pressed="false"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2" y="1.5" width="10" height="4" rx="1"/><path d="M12 3.5h1.5v3.5H8v2.5"/><rect x="6.8" y="9.5" width="2.4" height="5" rx=".8"/></svg></button>
+    </div>
+    <div class="tb-group">
+      <button data-cmd="zoom-out" title="Zoom out (-)" aria-label="Zoom out">−</button>
+      <button data-cmd="zoom-reset" id="zoom-label" title="Reset to 100%">100%</button>
+      <button data-cmd="zoom-in" title="Zoom in (+)" aria-label="Zoom in">+</button>
+      <button data-cmd="fit" title="Fit diagram (Shift+1)">Fit</button>
+    </div>
+    <div class="tb-group">
+      <input id="search" type="search" placeholder="Find…" aria-label="Find shape" spellcheck="false">
+    </div>
+    <div class="spacer"></div>
+    <div class="seg" role="group" aria-label="Mode">
+      <button data-cmd="mode-edit" class="on">Edit</button>
+      <button data-cmd="mode-preview">Preview</button>
+    </div>
+    <button data-cmd="theme" title="Toggle light / dark" aria-label="Toggle theme">◐</button>
+    <button data-cmd="help" title="Keyboard shortcuts (?)" aria-label="Help">?</button>
+  </header>
+
+  <aside id="palette" aria-label="Shapes">
+    <div class="pal-head">Shapes <span class="muted">drag or click</span></div>
+    <div id="shape-list"></div>
+    <div class="pal-head">Lanes &amp; phases</div>
+    <div class="pal-actions">
+      <button data-cmd="add-lane">+ Add lane</button>
+      <button data-cmd="add-phase">+ Add phase</button>
+      <button data-cmd="toggle-lane-orient">Rotate lanes</button>
+    </div>
+    <div class="pal-head">Connector</div>
+    <div class="pal-actions" id="connector-defaults"></div>
+  </aside>
+
+  <main id="stage" tabindex="0" aria-label="Canvas">
+    <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
+      <g id="world">
+        <g id="diagram"></g>
+        <g id="overlay"></g>
+      </g>
+    </svg>
+    <textarea id="inline-editor" hidden spellcheck="false"></textarea>
+    <div id="empty-hint" hidden>
+      <p><b>Empty canvas.</b> Drag a shape from the left, double-click anywhere, or pick a template with <b>New</b>.</p>
+    </div>
+    <iframe id="preview" title="Preview" hidden></iframe>
+  </main>
+
+  <aside id="inspector" aria-label="Properties"></aside>
+
+  <footer id="status">
+    <span id="status-sel"></span>
+    <span id="status-hint"></span>
+    <span class="spacer"></span>
+    <span id="status-save"></span>
+  </footer>
+</div>
+
+<div class="menu" id="context-menu" role="menu" hidden></div>
+<div class="menu quick-picker" id="quick-picker" role="menu" aria-label="Add a connected shape" hidden></div>
+<dialog id="modal"><div id="modal-body"></div></dialog>
+<input type="file" id="file-input" accept=".json,.html,.htm,.csv,.tsv,.txt,.xlsx,application/json,text/html,text/csv" hidden>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
