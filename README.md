@@ -113,3 +113,8 @@ git push origin v1.0.0
 
 The download link above always points at the newest release. Pushes to `main` also run the tests and,
 if Pages is enabled (Settings → Pages → Source: *GitHub Actions*), publish the editor to Pages.
+
+## Licence
+
+[MIT](LICENSE). The embedded IBM Plex fonts are under the SIL Open Font License 1.1
+([`src/fonts.LICENSE.txt`](src/fonts.LICENSE.txt)).
